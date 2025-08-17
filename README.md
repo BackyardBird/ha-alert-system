@@ -34,7 +34,7 @@ A centralized, dual-channel notification system for Home Assistant using Telegra
 
 ## Installation
 
-See the [complete documentation](<ha-alert-system/Alert System Setup and Usage Guide.md>) in the repository for detailed setup instructions.
+See the [complete documentation](<Alert System Setup and Usage Guide.md>) in the repository for detailed setup instructions.
 
 ## Security
 
