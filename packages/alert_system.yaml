@@ -41,8 +41,8 @@ script:
             {% else %}ℹ️{% endif %}
           house_name: !secret house_name
           timestamp: >
-            {% if include_timestamp %}
-            {{ now().strftime('%H:%M') }} - 
+            {% if include_timestamp | default(true) %}
+            {{ now().strftime('%H:%M') }}  
             {% endif %}
           main_chat: !secret telegram_main_alerts
           tech_chat: !secret telegram_technical_alerts
