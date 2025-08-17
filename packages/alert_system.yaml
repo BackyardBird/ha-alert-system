@@ -129,8 +129,8 @@ script:
       - action: script.send_alert
         data:
           message: "🖥️ SYSTEM: {{ message }}"
-          level: "{{ level }}"
-          channel: "{{ channel }}"
+          level: "{{ level | default('warning') }}"
+          channel: "{{ channel | default('technical') }}"
           chat_id: "{{ chat_id | default('') }}"
           location: ""
           include_timestamp: true
