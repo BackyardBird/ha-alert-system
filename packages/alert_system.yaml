@@ -1,0 +1,267 @@
+# packages/alert_system.yaml
+# Modern GUI-based Telegram integration version with dual-channel support
+# This file is IDENTICAL across all three houses
+# Only the chat IDs in the GUI integration and secrets differ per house
+
+script:
+  # Main alert script - this is your primary tool
+  send_alert:
+    alias: "Send Alert"
+    description: "Send a formatted alert via Telegram"
+    fields:
+      message:
+        description: "Alert message content"
+        example: "Kitchen smoke detector activated"
+        required: true
+      level:
+        description: "Alert level (info/warning/critical)"
+        example: "warning"
+        default: "info"
+      location:
+        description: "Location/room where alert originated"
+        example: "Kitchen"
+        required: false
+      include_timestamp:
+        description: "Include timestamp in message"
+        example: "true"
+        default: true
+      chat_id:
+        description: "Specific chat ID to send to (optional)"
+        example: "-1001234567890"
+        required: false
+      channel:
+        description: "Alert channel (main/technical/both)"
+        example: "main"
+        default: "main"
+    sequence:
+      - variables:
+          level_emoji: >
+            {% if level == 'critical' %}🚨
+            {% elif level == 'warning' %}⚠️
+            {% else %}ℹ️{% endif %}
+          house_name: !secret house_name
+          timestamp: >
+            {% if include_timestamp %}
+            {{ now().strftime('%H:%M') }} - 
+            {% endif %}
+          main_chat: !secret telegram_main_alerts
+          tech_chat: !secret telegram_technical_alerts
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ chat_id is defined and chat_id != '' }}"
+            sequence:
+              - action: telegram_bot.send_message
+                data:
+                  target: "{{ chat_id | int }}"
+                  message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}  {{ timestamp }}</b>\n{{ message }}{% if location %}\n📍 {{ location }}{% endif %}"
+                  parse_mode: "HTML"
+          - conditions:
+              - condition: template
+                value_template: "{{ channel == 'main' }}"
+            sequence:
+              - action: telegram_bot.send_message
+                data:
+                  target: "{{ main_chat | int }}"
+                  message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}  {{ timestamp }}</b>\n{{ message }}{% if location %}\n📍 {{ location }}{% endif %}"
+                  parse_mode: "HTML"
+          - conditions:
+              - condition: template
+                value_template: "{{ channel == 'technical' }}"
+            sequence:
+              - action: telegram_bot.send_message
+                data:
+                  target: "{{ tech_chat | int }}"
+                  message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}  {{ timestamp }}</b>\n{{ message }}{% if location %}\n📍 {{ location }}{% endif %}"
+                  parse_mode: "HTML"
+          - conditions:
+              - condition: template
+                value_template: "{{ channel == 'both' }}"
+            sequence:
+              - action: telegram_bot.send_message
+                data:
+                  target: "{{ main_chat | int }}"
+                  message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}  {{ timestamp }}</b>\n{{ message }}{% if location %}\n📍 {{ location }}{% endif %}"
+                  parse_mode: "HTML"
+              - action: telegram_bot.send_message
+                data:
+                  target: "{{ tech_chat | int }}"
+                  message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}  {{ timestamp }}</b>\n{{ message }}{% if location %}\n📍 {{ location }}{% endif %}"
+                  parse_mode: "HTML"
+
+  # Quick alert for simple notifications (main channel)
+  quick_alert:
+    alias: "Quick Alert"
+    description: "Send a simple info-level alert to main channel"
+    fields:
+      message:
+        description: "Alert message"
+        required: true
+      chat_id:
+        description: "Specific chat ID (optional)"
+        required: false
+    sequence:
+      - action: script.send_alert
+        data:
+          message: "{{ message }}"
+          level: "info"
+          channel: "main"
+          chat_id: "{{ chat_id if chat_id else '' }}"
+
+  # System alert for technical issues (technical channel by default)
+  system_alert:
+    alias: "System Alert"
+    description: "Send a system-level alert to technical channel"
+    fields:
+      message:
+        description: "System alert message"
+        required: true
+      level:
+        description: "Alert level"
+        default: "warning"
+      channel:
+        description: "Alert channel (main/technical/both)"
+        default: "technical"
+      chat_id:
+        description: "Specific chat ID (optional)"
+        required: false
+    sequence:
+      - action: script.send_alert
+        data:
+          message: "🖥️ SYSTEM: {{ message }}"
+          level: "{{ level }}"
+          channel: "{{ channel }}"
+          chat_id: "{{ chat_id if chat_id else '' }}"
+
+  # Security alert for security-related events (both channels)
+  security_alert:
+    alias: "Security Alert"
+    description: "Send a security alert to both channels"
+    fields:
+      message:
+        description: "Security alert message"
+        required: true
+      location:
+        description: "Location of security event"
+        required: false
+      chat_id:
+        description: "Specific chat ID (optional)"
+        required: false
+    sequence:
+      - action: script.send_alert
+        data:
+          message: "🔒 SECURITY: {{ message }}"
+          level: "critical"
+          location: "{{ location }}"
+          channel: "both"
+          chat_id: "{{ chat_id if chat_id else '' }}"
+
+  # Device alert for device-specific notifications (technical channel by default)
+  device_alert:
+    alias: "Device Alert"
+    description: "Send a device-related alert to technical channel"
+    fields:
+      device_name:
+        description: "Name of the device"
+        required: true
+      message:
+        description: "Device alert message"
+        required: true
+      level:
+        description: "Alert level"
+        default: "info"
+      channel:
+        description: "Alert channel (main/technical/both)"
+        default: "technical"
+      chat_id:
+        description: "Specific chat ID (optional)"
+        required: false
+    sequence:
+      - action: script.send_alert
+        data:
+          message: "{{ device_name }}: {{ message }}"
+          level: "{{ level }}"
+          channel: "{{ channel }}"
+          chat_id: "{{ chat_id if chat_id else '' }}"
+
+  # Bulk alert for sending multiple alerts
+  bulk_alert:
+    alias: "Bulk Alert"
+    description: "Send multiple alerts at once"
+    fields:
+      alerts:
+        description: "List of alerts to send"
+        required: true
+    sequence:
+      - repeat:
+          for_each: "{{ alerts }}"
+          sequence:
+            - action: script.send_alert
+              data:
+                message: "{{ repeat.item.message }}"
+                level: "{{ repeat.item.level | default('info') }}"
+                location: "{{ repeat.item.location | default('') }}"
+                channel: "{{ repeat.item.channel | default('main') }}"
+                chat_id: "{{ repeat.item.chat_id | default('') }}"
+
+  # Test alert to verify system is working (both channels)
+  test_alert:
+    alias: "Test Alert System"
+    description: "Send a test alert to verify the system is working"
+    fields:
+      chat_id:
+        description: "Specific chat ID to test (optional)"
+        required: false
+      channel:
+        description: "Channel to test (main/technical/both)"
+        default: "both"
+    sequence:
+      - action: script.send_alert
+        data:
+          message: "Alert system test - everything is working correctly! 🎉"
+          level: "info"
+          channel: "{{ channel }}"
+          chat_id: "{{ chat_id if chat_id else '' }}"
+
+  # Technical-specific convenience scripts
+  tech_alert:
+    alias: "Technical Alert"
+    description: "Send alert specifically to technical channel"
+    fields:
+      message:
+        description: "Technical alert message"
+        required: true
+      level:
+        description: "Alert level"
+        default: "info"
+      location:
+        description: "Location (optional)"
+        required: false
+    sequence:
+      - action: script.send_alert
+        data:
+          message: "{{ message }}"
+          level: "{{ level }}"
+          location: "{{ location if location else '' }}"
+          channel: "technical"
+
+  main_alert:
+    alias: "Main Alert"
+    description: "Send alert specifically to main channel"
+    fields:
+      message:
+        description: "Main alert message"
+        required: true
+      level:
+        description: "Alert level"
+        default: "info"
+      location:
+        description: "Location (optional)"
+        required: false
+    sequence:
+      - action: script.send_alert
+        data:
+          message: "{{ message }}"
+          level: "{{ level }}"
+          location: "{{ location if location else '' }}"
+          channel: "main"
