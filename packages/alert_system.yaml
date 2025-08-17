@@ -182,8 +182,8 @@ script:
       - action: script.send_alert
         data:
           message: "{{ device_name }}: {{ message }}"
-          level: "{{ level }}"
-          channel: "{{ channel }}"
+          level: "{{ level | default('info') }}"
+          channel: "{{ channel | default('technical') }}"
           chat_id: "{{ chat_id | default('') }}"
           location: ""
           include_timestamp: true
