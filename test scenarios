@@ -205,7 +205,7 @@ action: script.send_alert
 data:
   message: "Direct chat ID override test"
   level: "info"
-  chat_id: "-1002739888762"  # Directly target main channel
+  chat_id: "-100xxxxxxxxxx"  # Directly target main channel
 # Expected: Message ONLY in main group, ignoring channel parameter
 
 # ===== PHASE 8: ERROR CONDITION TESTING =====
