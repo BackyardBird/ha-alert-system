@@ -47,6 +47,7 @@ script:
           main_chat: !secret telegram_main_alerts
           tech_chat: !secret telegram_technical_alerts
       - choose:
+          # Custom chat_id overrides everything
           - conditions:
               - condition: template
                 value_template: "{{ chat_id is defined and chat_id != '' }}"
@@ -56,6 +57,7 @@ script:
                   target: "{{ chat_id | int }}"
                   message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}  {{ timestamp }}</b>\n{{ message | e }}{% if location %}\n📍 {{ location | e }}{% endif %}"
                   parse_mode: "HTML"
+          # Main channel
           - conditions:
               - condition: template
                 value_template: "{{ channel == 'main' }}"
@@ -65,6 +67,7 @@ script:
                   target: "{{ main_chat | int }}"
                   message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}  {{ timestamp }}</b>\n{{ message | e }}{% if location %}\n📍 {{ location | e }}{% endif %}"
                   parse_mode: "HTML"
+          # Technical channel
           - conditions:
               - condition: template
                 value_template: "{{ channel == 'technical' }}"
@@ -74,6 +77,7 @@ script:
                   target: "{{ tech_chat | int }}"
                   message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}  {{ timestamp }}</b>\n{{ message | e }}{% if location %}\n📍 {{ location | e }}{% endif %}"
                   parse_mode: "HTML"
+          # Both channels
           - conditions:
               - condition: template
                 value_template: "{{ channel == 'both' }}"
@@ -89,6 +93,14 @@ script:
                   message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}  {{ timestamp }}</b>\n{{ message | e }}{% if location %}\n📍 {{ location | e }}{% endif %}"
                   parse_mode: "HTML"
 
+        # Default fallback for invalid channels - send to technical channel
+        default:
+          - action: telegram_bot.send_message
+            data:
+              target: "{{ tech_chat | int }}"
+              message: "<b>⚠️ {{ house_name|upper }} WARNING  {{ timestamp }}</b>\n🚨 ALERT SYSTEM: Invalid channel '{{ channel }}' specified. Message sent to technical channel as fallback.\n\nOriginal message: {{ message | e }}{% if location %}\n📍 {{ location | e }}{% endif %}"
+              parse_mode: "HTML"
+              
   # Quick alert for simple notifications (main channel)
   quick_alert:
     alias: "Quick Alert"
