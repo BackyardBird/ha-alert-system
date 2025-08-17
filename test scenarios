@@ -1,0 +1,227 @@
+# Comprehensive Test Suite for Dual-Channel Alert System
+# Run these tests one by one and verify results in both Telegram groups
+
+# ===== PHASE 2: INDIVIDUAL SCRIPT TESTING =====
+
+# Test 1: System Test (Both Channels)
+action: script.test_alert
+data:
+  channel: "both"
+# Expected: Identical messages in BOTH groups
+
+# Test 2: Quick Alert (Main Only)
+action: script.quick_alert
+data:
+  message: "Testing quick alert - should only appear in MAIN channel"
+# Expected: Message ONLY in main group
+
+# Test 3: Tech Alert Convenience Script (Technical Only)
+action: script.tech_alert
+data:
+  message: "Testing tech alert - should only appear in TECHNICAL channel"
+  level: "info"
+# Expected: Message ONLY in technical group
+
+# Test 4: Main Alert Convenience Script (Main Only)
+action: script.main_alert
+data:
+  message: "Testing main alert - should only appear in MAIN channel"
+  level: "info"
+# Expected: Message ONLY in main group
+
+# ===== PHASE 3: CHANNEL ROUTING VERIFICATION =====
+
+# Test 5: Send Alert - Main Channel
+action: script.send_alert
+data:
+  message: "Explicit main channel test"
+  level: "info"
+  channel: "main"
+  location: "Test Area"
+# Expected: Message ONLY in main group with location
+
+# Test 6: Send Alert - Technical Channel
+action: script.send_alert
+data:
+  message: "Explicit technical channel test"
+  level: "warning"
+  channel: "technical"
+  location: "Server Room"
+# Expected: Message ONLY in technical group with location
+
+# Test 7: Send Alert - Both Channels
+action: script.send_alert
+data:
+  message: "Both channels test - should appear in BOTH groups"
+  level: "critical"
+  channel: "both"
+  location: "Kitchen"
+# Expected: Identical messages in BOTH groups
+
+# ===== PHASE 4: DEFAULT BEHAVIOR TESTING =====
+
+# Test 8: System Alert (Default: Technical)
+action: script.system_alert
+data:
+  message: "System alert default routing test"
+  level: "warning"
+# Expected: Message ONLY in technical group with 🖥️ prefix
+
+# Test 9: System Alert Override to Main
+action: script.system_alert
+data:
+  message: "System alert override to main channel"
+  level: "warning"
+  channel: "main"
+# Expected: Message ONLY in main group with 🖥️ prefix
+
+# Test 10: Device Alert (Default: Technical)
+action: script.device_alert
+data:
+  device_name: "Test Device"
+  message: "default routing test"
+  level: "info"
+# Expected: Message ONLY in technical group, format: "Test Device: default routing test"
+
+# Test 11: Device Alert Override to Main
+action: script.device_alert
+data:
+  device_name: "Family TV"
+  message: "override to main channel"
+  level: "info"
+  channel: "main"
+# Expected: Message ONLY in main group
+
+# Test 12: Security Alert (Always Both - Can't Override)
+action: script.security_alert
+data:
+  message: "Security test - should ALWAYS go to both channels"
+  location: "Front Door"
+# Expected: Identical messages in BOTH groups with 🔒 prefix, critical level
+
+# ===== PHASE 5: FORMATTING AND FEATURES TESTING =====
+
+# Test 13: All Alert Levels - Info
+action: script.send_alert
+data:
+  message: "Info level formatting test"
+  level: "info"
+  channel: "both"
+# Expected: ℹ️ emoji, INFO level
+
+# Test 14: All Alert Levels - Warning
+action: script.send_alert
+data:
+  message: "Warning level formatting test"
+  level: "warning"
+  channel: "both"
+# Expected: ⚠️ emoji, WARNING level
+
+# Test 15: All Alert Levels - Critical
+action: script.send_alert
+data:
+  message: "Critical level formatting test"
+  level: "critical"
+  channel: "both"
+# Expected: 🚨 emoji, CRITICAL level
+
+# Test 16: Timestamp Toggle
+action: script.send_alert
+data:
+  message: "No timestamp test"
+  level: "info"
+  channel: "both"
+  include_timestamp: false
+# Expected: No timestamp in header
+
+# Test 17: Location Formatting
+action: script.send_alert
+data:
+  message: "Location formatting test"
+  level: "info"
+  channel: "both"
+  location: "Multi Word Location Name"
+# Expected: 📍 Multi Word Location Name on separate line
+
+# Test 18: HTML Formatting
+action: script.send_alert
+data:
+  message: "HTML test with <b>bold</b> and <i>italic</i> text"
+  level: "info"
+  channel: "both"
+# Expected: Bold and italic formatting to work
+
+# ===== PHASE 6: BULK ALERT TESTING =====
+
+# Test 19: Mixed Channel Bulk Alert
+action: script.bulk_alert
+data:
+  alerts:
+    - message: "Bulk test 1 - main channel"
+      level: "info"
+      channel: "main"
+    - message: "Bulk test 2 - technical channel"
+      level: "warning"
+      channel: "technical"
+    - message: "Bulk test 3 - both channels"
+      level: "critical"
+      channel: "both"
+      location: "Test Location"
+# Expected: 
+# - Message 1 ONLY in main
+# - Message 2 ONLY in technical  
+# - Message 3 in BOTH groups
+
+# ===== PHASE 7: EDGE CASE TESTING =====
+
+# Test 20: Empty Location
+action: script.send_alert
+data:
+  message: "Empty location test"
+  level: "info"
+  channel: "both"
+  location: ""
+# Expected: No location line shown
+
+# Test 21: Long Message
+action: script.send_alert
+data:
+  message: "This is a very long message to test how the formatting handles extended text that might wrap across multiple lines in the Telegram interface and ensure proper formatting is maintained throughout the entire message length"
+  level: "info"
+  channel: "both"
+  location: "Very Long Location Name That Tests Formatting"
+# Expected: Proper formatting maintained
+
+# Test 22: Special Characters
+action: script.send_alert
+data:
+  message: "Special chars: !@#$%^&*()_+-=[]{}|;':\",./<>? 🎉🔥💯"
+  level: "info"
+  channel: "both"
+# Expected: All characters display correctly
+
+# Test 23: Override Chat ID (Direct Targeting)
+action: script.send_alert
+data:
+  message: "Direct chat ID override test"
+  level: "info"
+  chat_id: "-1002739888762"  # Directly target main channel
+# Expected: Message ONLY in main group, ignoring channel parameter
+
+# ===== PHASE 8: ERROR CONDITION TESTING =====
+
+# Test 24: Invalid Channel (Should Default)
+action: script.send_alert
+data:
+  message: "Invalid channel test"
+  level: "info"
+  channel: "invalid_channel_name"
+# Expected: Should handle gracefully or show error
+
+# Test 25: Missing Required Fields
+action: script.device_alert
+data:
+  device_name: "Test Device"
+  # Missing message field
+  level: "info"
+# Expected: Should show error or handle gracefully
