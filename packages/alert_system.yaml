@@ -106,7 +106,8 @@ script:
           message: "{{ message }}"
           level: "info"
           channel: "main"
-          chat_id: "{{ chat_id if chat_id else '' }}"
+          chat_id: "{{ chat_id | default('') }}"
+          include_timestamp: true
 
   # System alert for technical issues (technical channel by default)
   system_alert:
@@ -154,9 +155,10 @@ script:
         data:
           message: "🔒 SECURITY: {{ message }}"
           level: "critical"
-          location: "{{ location }}"
+          location: "{{ location | default('') }}"
           channel: "both"
-          chat_id: "{{ chat_id if chat_id else '' }}"
+          chat_id: "{{ chat_id | default('') }}"
+          include_timestamp: true
 
   # Device alert for device-specific notifications (technical channel by default)
   device_alert:
@@ -224,8 +226,9 @@ script:
         data:
           message: "Alert system test - everything is working correctly! 🎉"
           level: "info"
-          channel: "{{ channel }}"
-          chat_id: "{{ chat_id if chat_id else '' }}"
+          channel: "{{ channel | default('both') }}"
+          chat_id: "{{ chat_id | default('') }}"
+          include_timestamp: true
 
   # Technical-specific convenience scripts
   tech_alert:
@@ -245,9 +248,10 @@ script:
       - action: script.send_alert
         data:
           message: "{{ message }}"
-          level: "{{ level }}"
-          location: "{{ location if location else '' }}"
+          level: "{{ level | default('info') }}"
+          location: "{{ location | default('') }}"
           channel: "technical"
+          include_timestamp: true
 
   main_alert:
     alias: "Main Alert"
@@ -266,6 +270,7 @@ script:
       - action: script.send_alert
         data:
           message: "{{ message }}"
-          level: "{{ level }}"
-          location: "{{ location if location else '' }}"
+          level: "{{ level | default('info') }}"
+          location: "{{ location | default('') }}"
           channel: "main"
+          include_timestamp: true
