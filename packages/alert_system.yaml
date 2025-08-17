@@ -131,7 +131,9 @@ script:
           message: "🖥️ SYSTEM: {{ message }}"
           level: "{{ level }}"
           channel: "{{ channel }}"
-          chat_id: "{{ chat_id if chat_id else '' }}"
+          chat_id: "{{ chat_id | default('') }}"
+          location: ""
+          include_timestamp: true
 
   # Security alert for security-related events (both channels)
   security_alert:
