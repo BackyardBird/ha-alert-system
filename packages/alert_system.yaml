@@ -184,7 +184,9 @@ script:
           message: "{{ device_name }}: {{ message }}"
           level: "{{ level }}"
           channel: "{{ channel }}"
-          chat_id: "{{ chat_id if chat_id else '' }}"
+          chat_id: "{{ chat_id | default('') }}"
+          location: ""
+          include_timestamp: true
 
   # Bulk alert for sending multiple alerts
   bulk_alert:
