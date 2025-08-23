@@ -4,6 +4,10 @@
 # Only the chat IDs in the GUI integration and secrets differ per house
 
 script:
+  # ===================================
+  # CORE ALERT SYSTEM SCRIPTS
+  # ===================================
+  
   # Main alert script - this is your primary tool
   send_alert:
     alias: "Send Alert"
@@ -814,12 +818,206 @@ script:
             Use these entity IDs in the threshold alert form above.
           level: info
 
+  # ===================================
+  # BINARY SENSOR AUTOMATION GENERATOR SCRIPTS
+  # ===================================
+  
+  # Helper script to select entity from browser
+  select_binary_entity:
+    alias: "Select Binary Entity"
+    description: "Helper to select entity from browser and auto-fill form"
+    fields:
+      entity_id:
+        description: "Entity ID to select"
+        required: true
+    sequence:
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.binary_automation_entity
+        data:
+          value: "{{ entity_id }}"
+      
+      - variables:
+          entity_name: "{{ state_attr(entity_id, 'friendly_name') or entity_id.split('.')[1] | replace('_', ' ') | title }}"
+          device_class: "{{ state_attr(entity_id, 'device_class') or 'unknown' }}"
+          
+          # Smart defaults based on device class
+          default_message: >
+            {% if device_class == 'door' %}
+              {{ entity_name }} opened
+            {% elif device_class == 'window' %}
+              {{ entity_name }} opened
+            {% elif device_class == 'motion' %}
+              Motion detected in {{ entity_name.replace(' Motion', '').replace(' Sensor', '') }}
+            {% elif device_class in ['smoke', 'gas'] %}
+              {{ device_class.title() }} detected - {{ entity_name }}!
+            {% elif device_class == 'problem' %}
+              Problem detected: {{ entity_name }}
+            {% else %}
+              {{ entity_name }} activated
+            {% endif %}
+          
+          default_level: >
+            {% if device_class in ['smoke', 'gas', 'safety'] %}
+              critical
+            {% elif device_class == 'problem' %}
+              warning
+            {% else %}
+              info
+            {% endif %}
+          
+          default_trigger: >
+            {% if device_class == 'motion' %}
+              true
+            {% else %}
+              true
+            {% endif %}
+      
+      # Set smart defaults
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.binary_automation_message
+        data:
+          value: "{{ default_message }}"
+      
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.binary_automation_level
+        data:
+          option: "{{ default_level }}"
+      
+      - action: input_boolean.turn_{{ 'on' if default_trigger else 'off' }}
+        target:
+          entity_id: input_boolean.binary_automation_trigger_on
+
+  # Generate and display the YAML
+  generate_binary_automation_yaml:
+    alias: "Generate Binary Automation YAML"
+    description: "Generate the automation YAML and provide feedback"
+    sequence:
+      - variables:
+          entity: "{{ states('input_text.binary_automation_entity') }}"
+          message: "{{ states('input_text.binary_automation_message') }}"
+          form_status: "{{ states('sensor.binary_automation_form_status') }}"
+      
+      - if:
+          - condition: template
+            value_template: "{{ entity != '' and message != '' and states(entity) != 'unknown' }}"
+        then:
+          - action: script.tech_alert
+            data:
+              message: |
+                ✅ AUTOMATION YAML GENERATED
+                
+                Generated automation YAML for {{ state_attr(entity, 'friendly_name') or entity }}.
+                
+                📋 Copy the YAML from the card above and paste it into a new automation in Home Assistant.
+                
+                🔍 Steps:
+                1. Settings → Automations & Scenes
+                2. Create Automation → Create new automation  
+                3. ⋮ menu → Edit in YAML
+                4. Paste the generated code
+                5. Save automation
+              level: info
+        else:
+          - action: script.tech_alert
+            data:
+              message: |
+                ❌ FORM INCOMPLETE
+                
+                Please ensure:
+                • Valid binary sensor is selected
+                • Alert message is filled in
+                
+                Current status: {{ form_status }}
+              level: warning
+
+  # Clear the form
+  clear_binary_automation_form:
+    alias: "Clear Binary Automation Form"
+    description: "Reset all form fields"
+    sequence:
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.binary_automation_entity
+        data:
+          value: ""
+      
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.binary_automation_message
+        data:
+          value: ""
+      
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.binary_automation_location
+        data:
+          value: ""
+      
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.binary_automation_trigger_on
+      
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.binary_automation_level
+        data:
+          option: "warning"
+      
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.binary_automation_channel
+        data:
+          option: "main"
+
+  # Quick presets for common scenarios
+  preset_door_alert:
+    alias: "Preset: Door Alert"
+    description: "Quick preset for door opening alerts"
+    sequence:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.binary_automation_trigger_on
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.binary_automation_level
+        data:
+          option: "info"
+      - action: script.tech_alert
+        data:
+          message: "Door alert preset applied. Select a door sensor from the browser below."
+          level: info
+
+  preset_security_alert:
+    alias: "Preset: Security Alert"
+    description: "Quick preset for security-related alerts"
+    sequence:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.binary_automation_trigger_on
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.binary_automation_level
+        data:
+          option: "critical"
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.binary_automation_channel
+        data:
+          option: "both"
+      - action: script.tech_alert
+        data:
+          message: "Security alert preset applied. Select a safety sensor from the browser below."
+          level: info
+
 # ===================================
 # INPUT HELPERS (CONSOLIDATED)
 # ===================================
 
 input_text:
-  # Main threshold storage helpers
+  # Threshold alert storage helpers
   threshold_entities:
     name: "Threshold Alert Entities"
     initial: ""
@@ -835,7 +1033,7 @@ input_text:
     initial: ""
     max: 255
 
-  # Form input helpers
+  # Threshold form input helpers
   temp_threshold_entity:
     name: "Temporary Threshold Entity"
     initial: ""
@@ -851,13 +1049,37 @@ input_text:
     initial: ""
     max: 100
 
+  # Binary automation form inputs
+  binary_automation_entity:
+    name: "Binary Automation Entity"
+    initial: ""
+    max: 100
+
+  binary_automation_message:
+    name: "Binary Automation Message"
+    initial: ""
+    max: 200
+
+  binary_automation_location:
+    name: "Binary Automation Location"
+    initial: ""
+    max: 100
+
 input_boolean:
+  # Threshold alerts system toggle
   threshold_alerts_enabled:
     name: "Enable Threshold Alerts"
     initial: true
     icon: mdi:alert-circle
 
+  # Binary automation form toggle
+  binary_automation_trigger_on:
+    name: "Binary Automation Trigger on ON/TRUE"
+    initial: true
+    icon: mdi:toggle-switch
+
 input_select:
+  # Threshold alert selectors
   threshold_alert_channel:
     name: "Default Alert Channel"
     options:
@@ -874,7 +1096,27 @@ input_select:
       - "below"
     initial: "above"
 
+  # Binary automation selectors
+  binary_automation_level:
+    name: "Binary Automation Alert Level"
+    options:
+      - info
+      - warning
+      - critical
+    initial: warning
+    icon: mdi:alert
+
+  binary_automation_channel:
+    name: "Binary Automation Alert Channel"
+    options:
+      - main
+      - technical
+      - both
+    initial: main
+    icon: mdi:message-alert
+
 input_number:
+  # Threshold form number input
   temp_threshold_value:
     name: "Temporary Threshold Value"
     min: -999
@@ -888,6 +1130,7 @@ input_number:
 
 template:
   - sensor:
+      # Threshold alert monitoring sensors
       - name: "Threshold Alert Count"
         unique_id: "pkg_threshold_alert_count"
         state: >
@@ -1084,6 +1327,79 @@ template:
             mdi:shield-remove
           {% endif %}
 
+      # Binary automation generator sensors
+      - name: "Generated Binary Automation YAML"
+        unique_id: "pkg_generated_binary_automation_yaml"
+        state: >
+          {% set entity = states('input_text.binary_automation_entity') %}
+          {% set message = states('input_text.binary_automation_message') %}
+          {% set location = states('input_text.binary_automation_location') %}
+          {% set trigger_on = is_state('input_boolean.binary_automation_trigger_on', 'on') %}
+          {% set level = states('input_select.binary_automation_level') %}
+          {% set channel = states('input_select.binary_automation_channel') %}
+          
+          {% if entity and message %}
+            {% set entity_name = state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title %}
+            {% set automation_name = entity_name + ' Alert' %}
+            {% set trigger_state = 'on' if trigger_on else 'off' %}
+            {% set trigger_word = 'becomes active' if trigger_on else 'becomes inactive' %}
+          
+# Generated Binary Sensor Automation
+alias: "{{ automation_name }}"
+description: "Alert when {{ entity_name }} {{ trigger_word }}"
+trigger:
+  - platform: state
+    entity_id: {{ entity }}
+    to: "{{ trigger_state }}"
+condition: []
+action:
+  - action: script.send_alert
+    data:
+      message: "{{ message }}"
+      level: "{{ level }}"
+      channel: "{{ channel }}"{% if location %}
+      location: "{{ location }}"{% endif %}
+
+mode: single
+          {% else %}
+# Please fill in the entity and message fields above to generate automation YAML
+          {% endif %}
+        icon: mdi:code-braces
+
+      - name: "Binary Automation Form Status"
+        unique_id: "pkg_binary_automation_form_status"
+        state: >
+          {% set entity = states('input_text.binary_automation_entity') %}
+          {% set message = states('input_text.binary_automation_message') %}
+          {% if entity != '' and entity != 'unknown' and message != '' and message != 'unknown' %}
+            {% if states(entity) != 'unknown' %}
+              Ready to generate
+            {% else %}
+              Invalid entity
+            {% endif %}
+          {% else %}
+            Fill required fields
+          {% endif %}
+        attributes:
+          entity_valid: >
+            {% set entity = states('input_text.binary_automation_entity') %}
+            {{ entity != '' and entity != 'unknown' and states(entity) != 'unknown' }}
+          message_valid: >
+            {% set message = states('input_text.binary_automation_message') %}
+            {{ message != '' and message != 'unknown' }}
+          form_complete: >
+            {% set entity = states('input_text.binary_automation_entity') %}
+            {% set message = states('input_text.binary_automation_message') %}
+            {{ entity != '' and entity != 'unknown' and message != '' and message != 'unknown' and states(entity) != 'unknown' }}
+          current_state: >
+            {% set entity = states('input_text.binary_automation_entity') %}
+            {% if entity != '' and entity != 'unknown' and states(entity) != 'unknown' %}
+              {{ states(entity) | title }}
+            {% else %}
+              N/A
+            {% endif %}
+        icon: mdi:form-select
+
 # ===================================
 # AUTOMATIONS 
 # ===================================
@@ -1091,15 +1407,31 @@ template:
 automation:
   - alias: "Threshold Alert Monitor"
     id: "threshold_alert_monitor"
-    description: "Monitor entities for threshold breaches"
+    description: "Monitor entities for threshold breaches - Universal trigger with smart filtering"
     trigger:
       - platform: state
-        entity_id: 
-          - sensor.dummy_trigger
+        entity_id: sensor.*
     condition:
       - condition: state
         entity_id: input_boolean.threshold_alerts_enabled
         state: 'on'
+      - condition: template
+        value_template: >
+          {# Only proceed if this entity is actually being monitored #}
+          {% set triggered_entity = trigger.entity_id %}
+          {% set ns = namespace(found=false) %}
+          {% for i in range(1, 4) %}
+            {% set helper_name = 'input_text.threshold_entities' + ('_' + i|string if i > 1 else '') %}
+            {% set entities_text = states(helper_name) %}
+            {% set entities_list = entities_text.split('|') if entities_text else [] %}
+            {% for item in entities_list %}
+              {% set parts = item.split(':') %}
+              {% if parts | length >= 4 and parts[0] == triggered_entity %}
+                {% set ns.found = true %}
+              {% endif %}
+            {% endfor %}
+          {% endfor %}
+          {{ ns.found }}
     action:
       - variables:
           all_entities: >
@@ -1169,5 +1501,5 @@ automation:
     action:
       - action: script.tech_alert
         data:
-          message: "Threshold entities updated. Go to Developer Tools → YAML → Reload AUTOMATIONS for changes to take effect."
+          message: "Threshold entities updated. Changes are now active."
           level: info
