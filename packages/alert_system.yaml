@@ -1169,5 +1169,5 @@ automation:
     action:
       - action: script.tech_alert
         data:
-          message: "Threshold entities updated. Restart required for trigger changes to take effect."
+          message: "Threshold entities updated. Go to Developer Tools → YAML → Reload AUTOMATIONS for changes to take effect."
           level: info
