@@ -870,3 +870,276 @@ automation:
                 
                 Use Developer Tools > Actions to configure.
               level: info
+
+# Additional Input Helpers and Scripts for Threshold Alert Management Card
+# Add these to your existing alert_system.yaml package
+
+# Additional Input Helpers for the Management Card
+input_text:
+  # Form inputs for creating alerts
+  temp_threshold_entity:
+    name: "Temporary Threshold Entity"
+    initial: ""
+    max: 100
+    # Used by the card form for entity selection
+
+  temp_threshold_message:
+    name: "Temporary Threshold Message"
+    initial: ""
+    max: 200
+    # Used by the card form for custom messages
+
+  temp_remove_entity:
+    name: "Temporary Remove Entity"
+    initial: ""
+    max: 100
+    # Used by the card form for removing entities
+
+input_number:
+  temp_threshold_value:
+    name: "Temporary Threshold Value"
+    min: -999
+    max: 9999
+    step: 0.1
+    initial: 20
+    # Used by the card form for threshold values
+
+input_select:
+  temp_threshold_condition:
+    name: "Temporary Threshold Condition"
+    options:
+      - "above"
+      - "below"
+    initial: "above"
+    # Used by the card form for condition selection
+
+# Additional Scripts for Card Functionality
+script:
+  # Create alert from the card form
+  create_threshold_alert_from_form:
+    alias: "Create Threshold Alert from Form"
+    description: "Create threshold alert using the card form inputs"
+    sequence:
+      - variables:
+          entity_id: "{{ states('input_text.temp_threshold_entity') }}"
+          threshold: "{{ states('input_number.temp_threshold_value') }}"
+          condition: "{{ states('input_select.temp_threshold_condition') }}"
+          message: "{{ states('input_text.temp_threshold_message') }}"
+      
+      - if:
+          - condition: template
+            value_template: "{{ entity_id != '' and entity_id != 'unknown' }}"
+        then:
+          - action: script.add_threshold_alert
+            data:
+              entity_id: "{{ entity_id }}"
+              threshold: "{{ threshold }}"
+              condition: "{{ condition }}"
+              custom_message: >
+                {% if message != '' and message != 'unknown' %}
+                  {{ message }}
+                {% else %}
+                  {% endif %}
+          
+          # Clear the form after successful creation
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.temp_threshold_entity
+            data:
+              value: ""
+          
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.temp_threshold_message
+            data:
+              value: ""
+          
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.temp_threshold_value
+            data:
+              value: 20
+          
+          - action: script.tech_alert
+            data:
+              message: "✅ Threshold alert created successfully via dashboard form"
+              level: info
+        else:
+          - action: script.tech_alert
+            data:
+              message: "❌ Error: Please enter a valid entity ID"
+              level: warning
+
+  # Quick setup with entity selection prompts
+  quick_battery_alert_setup:
+    alias: "Quick Battery Alert Setup"
+    description: "Quick setup for battery alerts with entity suggestions"
+    sequence:
+      - variables:
+          battery_entities: >
+            {% set ns = namespace(entities=[]) %}
+            {% for entity in states.sensor %}
+              {% if entity.attributes.device_class == 'battery' %}
+                {% set ns.entities = ns.entities + [entity.entity_id] %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.entities[:10] }}  {# Limit to 10 suggestions #}
+      
+      - action: script.tech_alert
+        data:
+          message: |
+            🔋 BATTERY ALERT SETUP
+            
+            Available battery sensors:
+            {% for entity in battery_entities %}
+            - {{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title }} ({{ entity }})
+            {% endfor %}
+            
+            Use the form above to add alerts for these entities.
+            Recommended threshold: 20% (below)
+          level: info
+
+  quick_temperature_alert_setup:
+    alias: "Quick Temperature Alert Setup"
+    description: "Quick setup for temperature alerts with entity suggestions"
+    sequence:
+      - variables:
+          temp_entities: >
+            {% set ns = namespace(entities=[]) %}
+            {% for entity in states.sensor %}
+              {% if entity.attributes.device_class == 'temperature' %}
+                {% set ns.entities = ns.entities + [entity.entity_id] %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.entities[:10] }}
+      
+      - action: script.tech_alert
+        data:
+          message: |
+            🌡️ TEMPERATURE ALERT SETUP
+            
+            Available temperature sensors:
+            {% for entity in temp_entities %}
+            - {{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title }} ({{ entity }})
+            {% endfor %}
+            
+            Use the form above to add high/low temperature alerts.
+            Tip: Set both 'above' and 'below' thresholds for the same entity.
+          level: info
+
+  quick_humidity_alert_setup:
+    alias: "Quick Humidity Alert Setup"
+    description: "Quick setup for humidity alerts with entity suggestions"
+    sequence:
+      - variables:
+          humidity_entities: >
+            {% set ns = namespace(entities=[]) %}
+            {% for entity in states.sensor %}
+              {% if entity.attributes.device_class == 'humidity' %}
+                {% set ns.entities = ns.entities + [entity.entity_id] %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.entities[:10] }}
+      
+      - action: script.tech_alert
+        data:
+          message: |
+            💧 HUMIDITY ALERT SETUP
+            
+            Available humidity sensors:
+            {% for entity in humidity_entities %}
+            - {{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title }} ({{ entity }})
+            {% endfor %}
+            
+            Use the form above to add humidity alerts.
+            Common thresholds: 30% (below) for too dry, 70% (above) for too humid.
+          level: info
+
+  # Enhanced remove script that works with the form
+  remove_threshold_alert_from_form:
+    alias: "Remove Threshold Alert from Form"
+    description: "Remove threshold alert using the card form"
+    sequence:
+      - variables:
+          entity_id: "{{ states('input_text.temp_remove_entity') }}"
+      
+      - if:
+          - condition: template
+            value_template: "{{ entity_id != '' and entity_id != 'unknown' }}"
+        then:
+          - action: script.remove_threshold_alert
+            data:
+              entity_id: "{{ entity_id }}"
+          
+          # Clear the form
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.temp_remove_entity
+            data:
+              value: ""
+        else:
+          - action: script.tech_alert
+            data:
+              message: "❌ Error: Please enter a valid entity ID to remove"
+              level: warning
+
+  # Entity discovery script
+  discover_threshold_candidates:
+    alias: "Discover Threshold Alert Candidates"
+    description: "Find sensors suitable for threshold monitoring"
+    sequence:
+      - variables:
+          numeric_sensors: >
+            {% set ns = namespace(sensors=[]) %}
+            {% for entity in states.sensor %}
+              {% if entity.state | float(none) is not none %}
+                {% if entity.attributes.device_class in ['temperature', 'humidity', 'battery', 'pressure', 'power', 'energy', 'current', 'voltage'] %}
+                  {% set ns.sensors = ns.sensors + [entity.entity_id] %}
+                {% endif %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.sensors[:20] }}
+      
+      - action: script.tech_alert
+        data:
+          message: |
+            🔍 THRESHOLD ALERT CANDIDATES
+            
+            Found {{ numeric_sensors | length }} suitable sensors:
+            {% for entity in numeric_sensors %}
+            - {{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title }}
+              ID: {{ entity }}
+              Current: {{ states(entity) }}{{ state_attr(entity, 'unit_of_measurement') or '' }}
+            {% endfor %}
+            
+            Use these entity IDs in the threshold alert form above.
+          level: info
+
+# Template sensors for enhanced monitoring
+template:
+  - sensor:
+      - name: "Threshold Alert Form Status"
+        state: >
+          {% set entity = states('input_text.temp_threshold_entity') %}
+          {% set value = states('input_number.temp_threshold_value') %}
+          {% if entity != '' and entity != 'unknown' %}
+            {% if states(entity) != 'unknown' %}
+              Ready to create
+            {% else %}
+              Invalid entity
+            {% endif %}
+          {% else %}
+            Enter entity ID
+          {% endif %}
+        attributes:
+          entity_valid: >
+            {% set entity = states('input_text.temp_threshold_entity') %}
+            {{ entity != '' and entity != 'unknown' and states(entity) != 'unknown' }}
+          current_value: >
+            {% set entity = states('input_text.temp_threshold_entity') %}
+            {% if entity != '' and entity != 'unknown' and states(entity) != 'unknown' %}
+              {{ states(entity) }}{{ state_attr(entity, 'unit_of_measurement') or '' }}
+            {% else %}
+              N/A
+            {% endif %}
+        icon: mdi:form-select
