@@ -653,9 +653,13 @@ input_select:
     icon: mdi:message-alert
 
 # Template sensors for threshold alert monitoring
+# Template Sensors with Unique IDs for GUI Editing
+# Replace the existing template: section in your alert_system.yaml with this
+
 template:
   - sensor:
       - name: "Threshold Alert Count"
+        unique_id: "pkg_threshold_alert_count"  # ✅ Enables GUI editing
         state: >
           {% set count = 0 %}
           {% for i in range(1, 4) %}
@@ -667,8 +671,10 @@ template:
           {% endfor %}
           {{ count }}
         icon: mdi:counter
-
+        device_class: null
+        
       - name: "Threshold Alert Status"
+        unique_id: "pkg_threshold_alert_status"  # ✅ Enables GUI editing
         state: >
           {% if is_state('input_boolean.threshold_alerts_enabled', 'on') %}
             {% set count = states('sensor.threshold_alert_count') | int %}
@@ -681,8 +687,10 @@ template:
             Disabled
           {% endif %}
         icon: mdi:shield-check
+        device_class: null
 
       - name: "Low Battery Devices"
+        unique_id: "pkg_low_battery_devices"  # ✅ Enables GUI editing
         state: >
           {% set ns = namespace(count=0) %}
           {% for entity in states.sensor %}
@@ -702,6 +710,226 @@ template:
             {% endfor %}
             {{ ns.devices }}
         icon: mdi:battery-alert
+        device_class: null
+        unit_of_measurement: "devices"
+
+      - name: "Threshold Alert Form Status"
+        unique_id: "pkg_threshold_form_status"  # ✅ Enables GUI editing
+        state: >
+          {% set entity = states('input_text.temp_threshold_entity') %}
+          {% set value = states('input_number.temp_threshold_value') %}
+          {% if entity != '' and entity != 'unknown' %}
+            {% if states(entity) != 'unknown' %}
+              Ready to create
+            {% else %}
+              Invalid entity
+            {% endif %}
+          {% else %}
+            Enter entity ID
+          {% endif %}
+        attributes:
+          entity_valid: >
+            {% set entity = states('input_text.temp_threshold_entity') %}
+            {{ entity != '' and entity != 'unknown' and states(entity) != 'unknown' }}
+          current_value: >
+            {% set entity = states('input_text.temp_threshold_entity') %}
+            {% if entity != '' and entity != 'unknown' and states(entity) != 'unknown' %}
+              {{ states(entity) }}{{ state_attr(entity, 'unit_of_measurement') or '' }}
+            {% else %}
+              N/A
+            {% endif %}
+          suggested_threshold: >
+            {% set entity = states('input_text.temp_threshold_entity') %}
+            {% if entity != '' and entity != 'unknown' and states(entity) != 'unknown' %}
+              {% set device_class = state_attr(entity, 'device_class') %}
+              {% if device_class == 'battery' %}
+                20 (below)
+              {% elif device_class == 'temperature' %}
+                25 (above) or 18 (below)
+              {% elif device_class == 'humidity' %}
+                70 (above) or 30 (below)
+              {% else %}
+                Set based on normal range
+              {% endif %}
+            {% else %}
+              N/A
+            {% endif %}
+        icon: mdi:form-select
+        device_class: null
+
+      # Additional helpful sensors for monitoring
+      - name: "Threshold Storage Usage"
+        unique_id: "pkg_threshold_storage_usage"  # ✅ Enables GUI editing
+        state: >
+          {% set total_chars = 0 %}
+          {% set max_chars = 765 %}  {# 255 * 3 helpers #}
+          {% for i in range(1, 4) %}
+            {% set helper_name = 'input_text.threshold_entities' + ('_' + i|string if i > 1 else '') %}
+            {% set content = states(helper_name) %}
+            {% if content %}
+              {% set total_chars = total_chars + content | length %}
+            {% endif %}
+          {% endfor %}
+          {{ (total_chars / max_chars * 100) | round(1) }}
+        attributes:
+          total_characters: >
+            {% set total_chars = 0 %}
+            {% for i in range(1, 4) %}
+              {% set helper_name = 'input_text.threshold_entities' + ('_' + i|string if i > 1 else '') %}
+              {% set content = states(helper_name) %}
+              {% if content %}
+                {% set total_chars = total_chars + content | length %}
+              {% endif %}
+            {% endfor %}
+            {{ total_chars }}
+          max_characters: 765
+          helper_1_usage: "{{ states('input_text.threshold_entities') | length }}/255"
+          helper_2_usage: "{{ states('input_text.threshold_entities_2') | length }}/255"  
+          helper_3_usage: "{{ states('input_text.threshold_entities_3') | length }}/255"
+        icon: mdi:gauge
+        device_class: null
+        unit_of_measurement: "%"
+
+      - name: "Threshold System Health"
+        unique_id: "pkg_threshold_system_health"  # ✅ Enables GUI editing
+        state: >
+          {% set issues = [] %}
+          
+          {# Check if system is enabled #}
+          {% if not is_state('input_boolean.threshold_alerts_enabled', 'on') %}
+            {% set issues = issues + ['System disabled'] %}
+          {% endif %}
+          
+          {# Check if any entities are configured #}
+          {% set total_entities = states('sensor.threshold_alert_count') | int %}
+          {% if total_entities == 0 %}
+            {% set issues = issues + ['No entities configured'] %}
+          {% endif %}
+          
+          {# Check storage usage #}
+          {% set storage_usage = states('sensor.threshold_storage_usage') | float(0) %}
+          {% if storage_usage > 90 %}
+            {% set issues = issues + ['Storage nearly full'] %}
+          {% endif %}
+          
+          {# Check for invalid entities #}
+          {% set invalid_count = 0 %}
+          {% for i in range(1, 4) %}
+            {% set helper_name = 'input_text.threshold_entities' + ('_' + i|string if i > 1 else '') %}
+            {% set entities_text = states(helper_name) %}
+            {% set entities_list = entities_text.split('|') if entities_text else [] %}
+            {% for item in entities_list %}
+              {% set parts = item.split(':') %}
+              {% if parts | length >= 4 %}
+                {% set entity = parts[0] %}
+                {% if states(entity) == 'unknown' %}
+                  {% set invalid_count = invalid_count + 1 %}
+                {% endif %}
+              {% endif %}
+            {% endfor %}
+          {% endfor %}
+          
+          {% if invalid_count > 0 %}
+            {% set issues = issues + [invalid_count ~ ' invalid entities'] %}
+          {% endif %}
+          
+          {# Return status #}
+          {% if issues | length == 0 %}
+            Healthy
+          {% else %}
+            {{ issues | length }} issues
+          {% endif %}
+        attributes:
+          issues: >
+            {% set issues = [] %}
+            {% if not is_state('input_boolean.threshold_alerts_enabled', 'on') %}
+              {% set issues = issues + ['System disabled'] %}
+            {% endif %}
+            {% set total_entities = states('sensor.threshold_alert_count') | int %}
+            {% if total_entities == 0 %}
+              {% set issues = issues + ['No entities configured'] %}
+            {% endif %}
+            {% set storage_usage = states('sensor.threshold_storage_usage') | float(0) %}
+            {% if storage_usage > 90 %}
+              {% set issues = issues + ['Storage nearly full (' ~ storage_usage ~ '%)'] %}
+            {% endif %}
+            {{ issues }}
+          last_checked: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+        icon: >
+          {% set issues = state_attr('sensor.threshold_system_health', 'issues') | length %}
+          {% if issues == 0 %}
+            mdi:shield-check
+          {% elif issues <= 2 %}
+            mdi:shield-alert
+          {% else %}
+            mdi:shield-remove
+          {% endif %}
+        device_class: null
+
+# ========================================================================
+# HOW TO ACCESS GUI EDITING FOR THESE SENSORS
+# ========================================================================
+
+# After adding unique_id to template sensors, you can edit them in the GUI:
+
+# 1. Go to: Settings → Devices & Services → Entities
+# 2. Search for: "threshold" or "pkg_"
+# 3. Click on any sensor to edit:
+#    - ✅ Change friendly name
+#    - ✅ Change icon  
+#    - ✅ Change entity ID
+#    - ✅ Enable/disable
+#    - ✅ Assign to area/room
+#    - ✅ Set device class (where applicable)
+#    - ❌ Cannot edit the template code (that stays in YAML)
+
+# BENEFITS:
+# ✅ Customize names without editing YAML
+# ✅ Organize sensors by area/room
+# ✅ Change icons to match your preference  
+# ✅ Better integration with UI cards
+# ✅ Easier entity management
+
+# LIMITATIONS:  
+# ❌ Template logic must still be edited in YAML
+# ❌ Cannot add/remove attributes via GUI
+# ❌ Complex templates better managed in YAML anyway
+
+# ========================================================================
+# ADDITIONAL GUI EDITING OPTIONS
+# ========================================================================
+
+# You can also edit these template sensors by:
+
+# 1. ENTITY REGISTRY (Most common):
+#    Settings → Devices & Services → Entities → [Search for sensor]
+
+# 2. DEVELOPER TOOLS:
+#    Developer Tools → States → [Find sensor] → [Click pencil icon]
+
+# 3. AREA ASSIGNMENT:
+#    Settings → Areas & Zones → [Select area] → [Assign entities]
+
+# 4. DEVICE MANAGEMENT:
+#    Settings → Devices & Services → Devices → [If sensor has device] 
+
+# ========================================================================
+# VALIDATION AFTER IMPLEMENTATION
+# ========================================================================
+
+# After adding these unique_id values:
+
+# 1. Restart Home Assistant
+# 2. Go to Settings → Devices & Services → Entities  
+# 3. Search for "pkg_threshold" - you should see all 6 sensors
+# 4. Click on any sensor - you should see edit options available
+# 5. Try changing a friendly name or icon - should work immediately
+# 6. Verify all template logic still works correctly
+
+# If you see "This entity does not have a unique ID" error:
+# - Double-check the unique_id field is properly indented
+# - Ensure unique_id values are truly unique across your system
+# - Restart Home Assistant after making changes
 
 # Automations for threshold monitoring
 automation:
