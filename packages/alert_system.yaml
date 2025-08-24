@@ -1330,7 +1330,7 @@ template:
       # Binary automation generator sensors
       - name: "Generated Binary Automation YAML"
         unique_id: "pkg_generated_binary_automation_yaml"
-        state: >
+        state: |
           {% set entity = states('input_text.binary_automation_entity') %}
           {% set message = states('input_text.binary_automation_message') %}
           {% set location = states('input_text.binary_automation_location') %}
@@ -1342,6 +1342,7 @@ template:
             {% set automation_name = entity_name + ' Alert' %}
             {% set trigger_state = 'on' if trigger_on else 'off' %}
             {% set trigger_word = 'becomes active' if trigger_on else 'becomes inactive' %}
+            {%- set yaml_content %}
 # Generated Binary Sensor Automation
 alias: "{{ automation_name }}"
 description: "Alert when {{ entity_name }} {{ trigger_word }}"
@@ -1358,6 +1359,8 @@ action:
       channel: "{{ channel }}"{% if location %}
       location: "{{ location }}"{% endif %}
 mode: single
+            {%- endset %}
+            {{ yaml_content }}
           {% else %}
 # Please fill in the entity and message fields above to generate automation YAML
           {% endif %}
