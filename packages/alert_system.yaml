@@ -1,5 +1,6 @@
 # packages/alert_system.yaml
-# Version: 3.0.0 - SIMPLIFIED AND FIXED
+# Version: 3.0.1 - MAJOR REWRITE
+# Significant simplification and cleanup
 # Removed quick setup and discovery scripts for simplicity
 # Fixed all YAML syntax issues
 
@@ -527,11 +528,25 @@ script:
                       channel: "{{ channel }}"{% if location %}
                       location: "{{ location }}"{% endif %}
                 mode: single
+              # Split YAML across multiple helpers if needed
+              yaml_part1: "{{ yaml_content[:250] }}"
+              yaml_part2: "{{ yaml_content[250:500] if yaml_content | length > 250 else '' }}"
+              yaml_part3: "{{ yaml_content[500:750] if yaml_content | length > 500 else '' }}"
           - action: input_text.set_value
             target:
               entity_id: input_text.generated_automation_yaml
             data:
-              value: "{{ yaml_content }}"
+              value: "{{ yaml_part1 }}"
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.generated_automation_yaml_2
+            data:
+              value: "{{ yaml_part2 }}"
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.generated_automation_yaml_3
+            data:
+              value: "{{ yaml_part3 }}"
           - action: persistent_notification.create
             data:
               title: "✅ Automation YAML Generated"
@@ -555,6 +570,21 @@ script:
       - action: input_text.set_value
         target:
           entity_id: input_text.binary_automation_location
+        data:
+          value: ""
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.generated_automation_yaml
+        data:
+          value: ""
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.generated_automation_yaml_2
+        data:
+          value: ""
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.generated_automation_yaml_3
         data:
           value: ""
       - action: input_select.select_option
@@ -631,7 +661,17 @@ input_text:
   generated_automation_yaml:
     name: "Generated Automation YAML"
     initial: ""
-    max: 8192
+    max: 255
+
+  generated_automation_yaml_2:
+    name: "Generated Automation YAML (Part 2)"
+    initial: ""
+    max: 255
+
+  generated_automation_yaml_3:
+    name: "Generated Automation YAML (Part 3)"
+    initial: ""
+    max: 255
 
 input_boolean:
   threshold_alerts_enabled:
