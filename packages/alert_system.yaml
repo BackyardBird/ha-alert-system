@@ -992,30 +992,60 @@ script:
   # Generate and display the YAML
   generate_binary_automation_yaml:
     alias: "Generate Binary Automation YAML"
-    description: "Generate the automation YAML and update display sensor"
+    description: "Validate form and provide user feedback"
     sequence:
       - variables:
           entity: "{{ states('input_text.binary_automation_entity') }}"
           message: "{{ states('input_text.binary_automation_message') }}"
+          entity_name: "{{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title if entity else 'Unknown' }}"
+          yaml_content: "{{ states('sensor.generated_binary_automation_yaml') }}"
       
       - if:
           - condition: template
             value_template: "{{ entity != '' and message != '' and states(entity) != 'unknown' }}"
         then:
-          - action: homeassistant.update_entity
-            target:
-              entity_id: sensor.generated_binary_automation_yaml
+          - action: persistent_notification.create
+            data:
+              title: "✅ Automation YAML Ready"
+              message: |
+                **Generated automation for {{ entity_name }}**
+                
+                📋 The YAML is displayed in the card above.
+                
+                **Quick Copy Instructions:**
+                1. Scroll up to see the "Generated Automation YAML" card
+                2. Select and copy the YAML code
+                3. Go to Settings → Automations & Scenes → Create Automation
+                4. Click ⋮ menu → Edit in YAML → Paste
+                
+                **Settings Used:**
+                • Entity: {{ entity }}
+                • Message: "{{ message }}"
+                • Trigger: {{ states('input_select.binary_automation_trigger_state') }}
+                • Level: {{ states('input_select.binary_automation_level') }}
+                • Channel: {{ states('input_select.binary_automation_channel') }}
+              notification_id: "binary_automation_ready"
         else:
           - action: persistent_notification.create
             data:
-              title: "Binary Automation Generator"
+              title: "❌ Form Incomplete"
               message: |
-                ❌ FORM INCOMPLETE
+                Please complete the required fields:
                 
-                Please ensure:
-                • Valid binary sensor is selected
-                • Alert message is filled in
-              notification_id: "binary_automation_error"
+                {% if entity == '' or entity == 'unknown' %}
+                ❌ **Entity Required:** Use the discovery buttons or enter an entity ID like `binary_sensor.front_door`
+                {% elif states(entity) == 'unknown' %}
+                ⚠️  **Entity Not Found:** Check that `{{ entity }}` exists in your system
+                {% else %}
+                ✅ **Entity OK:** {{ entity_name }}
+                {% endif %}
+                
+                {% if message == '' or message == 'unknown' %}
+                ❌ **Message Required:** Enter an alert message like "Front door opened"
+                {% else %}
+                ✅ **Message OK:** "{{ message }}"
+                {% endif %}
+              notification_id: "binary_automation_incomplete"
 
   # Clear the form
   clear_binary_automation_form:
