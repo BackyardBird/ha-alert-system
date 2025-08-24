@@ -1,5 +1,5 @@
 # packages/alert_system.yaml
-# Version: 2.1.1
+# Version: 2.1.2
 # Modern GUI-based Telegram integration version with dual-channel support
 # This file is IDENTICAL across all three houses
 # Only the chat IDs in the GUI integration and secrets differ per house
@@ -784,7 +784,94 @@ script:
               message: "❌ Error: Please enter a valid entity ID to remove"
               level: warning
 
-  discover_threshold_candidates:
+  # Entity discovery scripts (replace auto-entities functionality)
+  discover_door_sensors:
+    alias: "Discover Door Sensors"
+    description: "Find all door sensors in the system"
+    sequence:
+      - variables:
+          door_sensors: >
+            {% set ns = namespace(sensors=[]) %}
+            {% for entity in states.binary_sensor %}
+              {% if entity.attributes.device_class == 'door' %}
+                {% set ns.sensors = ns.sensors + [entity.entity_id] %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.sensors }}
+      
+      - action: script.tech_alert
+        data:
+          message: |
+            🚪 DOOR SENSORS DISCOVERED
+            
+            Found {{ door_sensors | length }} door sensors:
+            {% for entity in door_sensors %}
+            - {{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title }}
+              ID: {{ entity }}
+              Current: {{ states(entity) | title }}
+            {% endfor %}
+            
+            Copy any entity ID above to use in the binary automation generator.
+          level: info
+
+  discover_motion_sensors:
+    alias: "Discover Motion Sensors"
+    description: "Find all motion sensors in the system"
+    sequence:
+      - variables:
+          motion_sensors: >
+            {% set ns = namespace(sensors=[]) %}
+            {% for entity in states.binary_sensor %}
+              {% if entity.attributes.device_class == 'motion' %}
+                {% set ns.sensors = ns.sensors + [entity.entity_id] %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.sensors }}
+      
+      - action: script.tech_alert
+        data:
+          message: |
+            🏃 MOTION SENSORS DISCOVERED
+            
+            Found {{ motion_sensors | length }} motion sensors:
+            {% for entity in motion_sensors %}
+            - {{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title }}
+              ID: {{ entity }}
+              Current: {{ states(entity) | title }}
+            {% endfor %}
+            
+            Copy any entity ID above to use in the binary automation generator.
+          level: info
+
+  discover_safety_sensors:
+    alias: "Discover Safety Sensors"
+    description: "Find all safety sensors in the system"
+    sequence:
+      - variables:
+          safety_sensors: >
+            {% set ns = namespace(sensors=[]) %}
+            {% for entity in states.binary_sensor %}
+              {% if entity.attributes.device_class in ['smoke', 'gas', 'safety', 'problem'] %}
+                {% set ns.sensors = ns.sensors + [entity.entity_id] %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.sensors }}
+      
+      - action: script.tech_alert
+        data:
+          message: |
+            🔥 SAFETY SENSORS DISCOVERED
+            
+            Found {{ safety_sensors | length }} safety sensors:
+            {% for entity in safety_sensors %}
+            - {{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title }}
+              ID: {{ entity }}
+              Device Class: {{ state_attr(entity, 'device_class') or 'unknown' }}
+              Current: {{ states(entity) | title }}
+            {% endfor %}
+            
+            Copy any entity ID above to use in the binary automation generator.
+          level: info
     alias: "Discover Threshold Alert Candidates"
     description: "Find sensors suitable for threshold monitoring"
     sequence:
@@ -837,10 +924,19 @@ script:
       - variables:
           entity_name: "{{ state_attr(entity_id, 'friendly_name') or entity_id.split('.')[1] | replace('_', ' ') | title }}"
           device_class: "{{ state_attr(entity_id, 'device_class') or 'unknown' }}"
+          domain: "{{ entity_id.split('.')[0] }}"
           
-          # Smart defaults based on device class
+          # Smart defaults based on device class and domain
           default_message: >
-            {% if device_class == 'door' %}
+            {% if domain == 'cover' %}
+              {% if device_class in ['door', 'garage'] %}
+                {{ entity_name }} opened
+              {% elif device_class == 'window' %}
+                {{ entity_name }} opened
+              {% else %}
+                {{ entity_name }} opened
+              {% endif %}
+            {% elif device_class == 'door' %}
               {{ entity_name }} opened
             {% elif device_class == 'window' %}
               {{ entity_name }} opened
@@ -863,11 +959,15 @@ script:
               info
             {% endif %}
           
-          default_trigger: >
-            {% if device_class == 'motion' %}
-              true
+          default_trigger_state: >
+            {% if domain == 'cover' %}
+              on
+            {% elif device_class in ['door', 'window'] %}
+              on
+            {% elif device_class == 'motion' %}
+              on
             {% else %}
-              true
+              on
             {% endif %}
       
       # Set smart defaults
@@ -883,60 +983,39 @@ script:
         data:
           option: "{{ default_level }}"
       
-      - if:
-          - condition: template
-            value_template: "{{ default_trigger }}"
-        then:
-          - action: input_boolean.turn_on
-            target:
-              entity_id: input_boolean.binary_automation_trigger_on
-        else:
-          - action: input_boolean.turn_off
-            target:
-              entity_id: input_boolean.binary_automation_trigger_on
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.binary_automation_trigger_state
+        data:
+          option: "{{ default_trigger_state }}"
 
   # Generate and display the YAML
   generate_binary_automation_yaml:
     alias: "Generate Binary Automation YAML"
-    description: "Generate the automation YAML and provide feedback"
+    description: "Generate the automation YAML and update display sensor"
     sequence:
       - variables:
           entity: "{{ states('input_text.binary_automation_entity') }}"
           message: "{{ states('input_text.binary_automation_message') }}"
-          form_status: "{{ states('sensor.binary_automation_form_status') }}"
       
       - if:
           - condition: template
             value_template: "{{ entity != '' and message != '' and states(entity) != 'unknown' }}"
         then:
-          - action: script.tech_alert
-            data:
-              message: |
-                ✅ AUTOMATION YAML GENERATED
-                
-                Generated automation YAML for {{ state_attr(entity, 'friendly_name') or entity }}.
-                
-                📋 Copy the YAML from the card above and paste it into a new automation in Home Assistant.
-                
-                🔍 Steps:
-                1. Settings → Automations & Scenes
-                2. Create Automation → Create new automation  
-                3. ⋮ menu → Edit in YAML
-                4. Paste the generated code
-                5. Save automation
-              level: info
+          - action: homeassistant.update_entity
+            target:
+              entity_id: sensor.generated_binary_automation_yaml
         else:
-          - action: script.tech_alert
+          - action: persistent_notification.create
             data:
+              title: "Binary Automation Generator"
               message: |
                 ❌ FORM INCOMPLETE
                 
                 Please ensure:
                 • Valid binary sensor is selected
                 • Alert message is filled in
-                
-                Current status: {{ form_status }}
-              level: warning
+              notification_id: "binary_automation_error"
 
   # Clear the form
   clear_binary_automation_form:
@@ -961,9 +1040,11 @@ script:
         data:
           value: ""
       
-      - action: input_boolean.turn_on
+      - action: input_select.select_option
         target:
-          entity_id: input_boolean.binary_automation_trigger_on
+          entity_id: input_select.binary_automation_trigger_state
+        data:
+          option: "on"
       
       - action: input_select.select_option
         target:
@@ -982,9 +1063,11 @@ script:
     alias: "Preset: Door Alert"
     description: "Quick preset for door opening alerts"
     sequence:
-      - action: input_boolean.turn_on
+      - action: input_select.select_option
         target:
-          entity_id: input_boolean.binary_automation_trigger_on
+          entity_id: input_select.binary_automation_trigger_state
+        data:
+          option: "on"
       - action: input_select.select_option
         target:
           entity_id: input_select.binary_automation_level
@@ -1077,12 +1160,6 @@ input_boolean:
     initial: true
     icon: mdi:alert-circle
 
-  # Binary automation form toggle
-  binary_automation_trigger_on:
-    name: "Binary Automation Trigger on ON/TRUE"
-    initial: true
-    icon: mdi:toggle-switch
-
 input_select:
   # Threshold alert selectors
   threshold_alert_channel:
@@ -1119,6 +1196,15 @@ input_select:
       - both
     initial: main
     icon: mdi:message-alert
+
+  binary_automation_trigger_state:
+    name: "Binary Automation Trigger State"
+    options:
+      - "on"
+      - "off"  
+      - "unavailable"
+    initial: "on"
+    icon: mdi:state-machine
 
 input_number:
   # Threshold form number input
@@ -1339,17 +1425,45 @@ template:
           {% set entity = states('input_text.binary_automation_entity') %}
           {% set message = states('input_text.binary_automation_message') %}
           {% set location = states('input_text.binary_automation_location') %}
-          {% set trigger_on = is_state('input_boolean.binary_automation_trigger_on', 'on') %}
+          {% set trigger_state = states('input_select.binary_automation_trigger_state') %}
           {% set level = states('input_select.binary_automation_level') %}
           {% set channel = states('input_select.binary_automation_channel') %}
+          {% set domain = entity.split('.')[0] if entity else '' %}
+          {% set device_class = state_attr(entity, 'device_class') if entity else '' %}
           {% if entity and message %}
           {% set entity_name = state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title %}
           {% set automation_name = entity_name + ' Alert' %}
-          {% set trigger_state = 'on' if trigger_on else 'off' %}
-          {% set trigger_word = 'becomes active' if trigger_on else 'becomes inactive' %}
+          {% set state_description = trigger_state %}
+          {% if trigger_state == 'on' %}
+            {% if domain == 'cover' %}
+              {% set state_description = 'opens' %}
+            {% elif device_class == 'door' %}
+              {% set state_description = 'opens' %}
+            {% elif device_class == 'window' %}
+              {% set state_description = 'opens' %}
+            {% elif device_class == 'motion' %}
+              {% set state_description = 'detects motion' %}
+            {% else %}
+              {% set state_description = 'becomes active' %}
+            {% endif %}
+          {% elif trigger_state == 'off' %}
+            {% if domain == 'cover' %}
+              {% set state_description = 'closes' %}
+            {% elif device_class == 'door' %}
+              {% set state_description = 'closes' %}
+            {% elif device_class == 'window' %}
+              {% set state_description = 'closes' %}
+            {% elif device_class == 'motion' %}
+              {% set state_description = 'motion clears' %}
+            {% else %}
+              {% set state_description = 'becomes inactive' %}
+            {% endif %}
+          {% else %}
+            {% set state_description = 'becomes unavailable' %}
+          {% endif %}
           # Generated Binary Sensor Automation
           alias: "{{ automation_name }}"
-          description: "Alert when {{ entity_name }} {{ trigger_word }}"
+          description: "Alert when {{ entity_name }} {{ state_description }}"
           trigger:
             - platform: state
               entity_id: {{ entity }}
@@ -1364,7 +1478,7 @@ template:
                 location: "{{ location }}"{% endif %}
           mode: single
           {% else %}
-          # Please fill in the entity and message fields above to generate automation YAML
+          # Please fill in the entity and message fields to generate automation YAML
           {% endif %}
         icon: mdi:code-braces
 
@@ -1397,6 +1511,25 @@ template:
             {% set entity = states('input_text.binary_automation_entity') %}
             {% if entity != '' and entity != 'unknown' and states(entity) != 'unknown' %}
               {{ states(entity) | title }}
+            {% else %}
+              N/A
+            {% endif %}
+          state_descriptions: >
+            {% set entity = states('input_text.binary_automation_entity') %}
+            {% if entity != '' and entity != 'unknown' and states(entity) != 'unknown' %}
+              {% set domain = entity.split('.')[0] %}
+              {% set device_class = state_attr(entity, 'device_class') or 'unknown' %}
+              {% if domain == 'cover' %}
+                ON = Opens, OFF = Closes, UNAVAILABLE = Connection Lost
+              {% elif device_class == 'door' %}
+                ON = Opens, OFF = Closes, UNAVAILABLE = Connection Lost
+              {% elif device_class == 'window' %}
+                ON = Opens, OFF = Closes, UNAVAILABLE = Connection Lost
+              {% elif device_class == 'motion' %}
+                ON = Motion Detected, OFF = Motion Clear, UNAVAILABLE = Connection Lost
+              {% else %}
+                ON = Active, OFF = Inactive, UNAVAILABLE = Connection Lost
+              {% endif %}
             {% else %}
               N/A
             {% endif %}
