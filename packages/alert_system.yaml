@@ -1,5 +1,5 @@
 # packages/alert_system.yaml
-# Version: 2.1.0
+# Version: 2.1.1
 # Modern GUI-based Telegram integration version with dual-channel support
 # This file is IDENTICAL across all three houses
 # Only the chat IDs in the GUI integration and secrets differ per house
@@ -59,7 +59,7 @@ script:
             sequence:
               - action: telegram_bot.send_message
                 data:
-                  target: "{{ chat_id | int }}"
+                  target: "{{ chat_id | int }}"  # Safe: chat_id already validated as non-empty
                   message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if location %}\n📍 {{ location | e }}{% endif %}"
                   parse_mode: "HTML"
           # Main channel
@@ -641,11 +641,7 @@ script:
               entity_id: "{{ entity_id }}"
               threshold: "{{ threshold }}"
               condition: "{{ condition }}"
-              custom_message: >
-                {% if message != '' and message != 'unknown' %}
-                  {{ message }}
-                {% else %}
-                  {% endif %}
+              custom_message: "{{ message if message != '' and message != 'unknown' else '' }}"
           
           # Clear the form after successful creation
           - action: input_text.set_value
@@ -740,7 +736,7 @@ script:
       - variables:
           humidity_entities: >
             {% set ns = namespace(entities=[]) %}
-            {% for entity in states.sensor %>
+            {% for entity in states.sensor %}
               {% if entity.attributes.device_class == 'humidity' %}
                 {% set ns.entities = ns.entities + [entity.entity_id] %}
               {% endif %}
@@ -887,9 +883,17 @@ script:
         data:
           option: "{{ default_level }}"
       
-      - action: input_boolean.turn_{{ 'on' if default_trigger else 'off' }}
-        target:
-          entity_id: input_boolean.binary_automation_trigger_on
+      - if:
+          - condition: template
+            value_template: "{{ default_trigger }}"
+        then:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.binary_automation_trigger_on
+        else:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.binary_automation_trigger_on
 
   # Generate and display the YAML
   generate_binary_automation_yaml:
@@ -1319,7 +1323,7 @@ template:
             {{ issues }}
           last_checked: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
         icon: >
-          {% set issues = state_attr('sensor.threshold_system_health', 'issues') | length %}
+          {% set issues = (state_attr('sensor.threshold_system_health', 'issues') or []) | length %}
           {% if issues == 0 %}
             mdi:shield-check
           {% elif issues <= 2 %}
@@ -1408,7 +1412,7 @@ automation:
     description: "Monitor entities for threshold breaches - Universal trigger with smart filtering"
     trigger:
       - platform: state
-        entity_id: sensor.*
+        entity_id: sensor.*  # Universal trigger - filtered by conditions for efficiency
     condition:
       - condition: state
         entity_id: input_boolean.threshold_alerts_enabled
