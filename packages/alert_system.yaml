@@ -1,5 +1,5 @@
 # packages/alert_system.yaml
-# Version: 2.1.3
+# Version: 2.1.4
 # Modern GUI-based Telegram integration version with dual-channel support
 # This file is IDENTICAL across all three houses
 # Only the chat IDs in the GUI integration and secrets differ per house
@@ -628,7 +628,7 @@ script:
     sequence:
       - variables:
           entity_id: "{{ states('input_text.temp_threshold_entity') }}"
-          threshold: "{{ states('input_number.temp_threshold_value') }}"
+          threshold: "{{ states('input_text.temp_threshold_value') }}"
           condition: "{{ states('input_select.temp_threshold_condition') }}"
           message: "{{ states('input_text.temp_threshold_message') }}"
       
@@ -656,11 +656,11 @@ script:
             data:
               value: ""
           
-          - action: input_number.set_value
+          - action: input_text.set_value
             target:
-              entity_id: input_number.temp_threshold_value
+              entity_id: input_text.temp_threshold_value
             data:
-              value: 20
+              value: "20"
           
           - action: script.tech_alert
             data:
@@ -992,60 +992,95 @@ script:
   # Generate and display the YAML
   generate_binary_automation_yaml:
     alias: "Generate Binary Automation YAML"
-    description: "Validate form and provide user feedback"
+    description: "Generate automation YAML and store in text helper"
     sequence:
       - variables:
           entity: "{{ states('input_text.binary_automation_entity') }}"
           message: "{{ states('input_text.binary_automation_message') }}"
-          entity_name: "{{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title if entity else 'Unknown' }}"
-          yaml_content: "{{ states('sensor.generated_binary_automation_yaml') }}"
+          location: "{{ states('input_text.binary_automation_location') }}"
+          trigger_state: "{{ states('input_select.binary_automation_trigger_state') }}"
+          level: "{{ states('input_select.binary_automation_level') }}"
+          channel: "{{ states('input_select.binary_automation_channel') }}"
       
       - if:
           - condition: template
             value_template: "{{ entity != '' and message != '' and states(entity) != 'unknown' }}"
         then:
+          - variables:
+              entity_name: "{{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title }}"
+              domain: "{{ entity.split('.')[0] }}"
+              device_class: "{{ state_attr(entity, 'device_class') or 'unknown' }}"
+              automation_name: "{{ entity_name }} Alert"
+              
+              state_description: >
+                {% if trigger_state == 'on' %}
+                  {% if domain == 'cover' %}opens
+                  {% elif device_class == 'door' %}opens
+                  {% elif device_class == 'window' %}opens  
+                  {% elif device_class == 'motion' %}detects motion
+                  {% else %}becomes active{% endif %}
+                {% elif trigger_state == 'off' %}
+                  {% if domain == 'cover' %}closes
+                  {% elif device_class == 'door' %}closes
+                  {% elif device_class == 'window' %}closes
+                  {% elif device_class == 'motion' %}motion clears
+                  {% else %}becomes inactive{% endif %}
+                {% else %}becomes unavailable{% endif %}
+              
+              yaml_content: |
+                # Generated Binary Sensor Automation
+                alias: "{{ automation_name }}"
+                description: "Alert when {{ entity_name }} {{ state_description }}"
+                trigger:
+                  - platform: state
+                    entity_id: {{ entity }}
+                    to: "{{ trigger_state }}"
+                condition: []
+                action:
+                  - action: script.send_alert
+                    data:
+                      message: "{{ message }}"
+                      level: "{{ level }}"
+                      channel: "{{ channel }}"{% if location %}
+                      location: "{{ location }}"{% endif %}
+                mode: single
+          
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.generated_automation_yaml
+            data:
+              value: "{{ yaml_content }}"
+          
           - action: persistent_notification.create
             data:
-              title: "✅ Automation YAML Ready"
+              title: "✅ Automation YAML Generated"
               message: |
                 **Generated automation for {{ entity_name }}**
                 
-                📋 The YAML is displayed in the card above.
+                📋 The YAML code is now ready in the display card above.
                 
-                **Quick Copy Instructions:**
-                1. Scroll up to see the "Generated Automation YAML" card
-                2. Select and copy the YAML code
-                3. Go to Settings → Automations & Scenes → Create Automation
-                4. Click ⋮ menu → Edit in YAML → Paste
+                **Next Steps:**
+                1. Copy the YAML from the card above
+                2. Settings → Automations & Scenes → Create Automation  
+                3. Create new automation → ⋮ menu → Edit in YAML
+                4. Paste and save
                 
-                **Settings Used:**
-                • Entity: {{ entity }}
-                • Message: "{{ message }}"
-                • Trigger: {{ states('input_select.binary_automation_trigger_state') }}
-                • Level: {{ states('input_select.binary_automation_level') }}
-                • Channel: {{ states('input_select.binary_automation_channel') }}
-              notification_id: "binary_automation_ready"
+                **Settings:** {{ trigger_state | title }}, {{ level | title }}, {{ channel | title }}
+              notification_id: "yaml_generated"
         else:
           - action: persistent_notification.create
             data:
               title: "❌ Form Incomplete"
               message: |
-                Please complete the required fields:
+                Please complete the form:
                 
-                {% if entity == '' or entity == 'unknown' %}
-                ❌ **Entity Required:** Use the discovery buttons or enter an entity ID like `binary_sensor.front_door`
-                {% elif states(entity) == 'unknown' %}
-                ⚠️  **Entity Not Found:** Check that `{{ entity }}` exists in your system
-                {% else %}
-                ✅ **Entity OK:** {{ entity_name }}
-                {% endif %}
+                {% if entity == '' %}**Entity:** Required - select a binary sensor
+                {% elif states(entity) == 'unknown' %}**Entity:** "{{ entity }}" not found
+                {% else %}**Entity:** ✅ {{ state_attr(entity, 'friendly_name') or entity }}{% endif %}
                 
-                {% if message == '' or message == 'unknown' %}
-                ❌ **Message Required:** Enter an alert message like "Front door opened"
-                {% else %}
-                ✅ **Message OK:** "{{ message }}"
-                {% endif %}
-              notification_id: "binary_automation_incomplete"
+                {% if message == '' %}**Message:** Required - enter alert text
+                {% else %}**Message:** ✅ "{{ message }}"{% endif %}
+              notification_id: "yaml_incomplete"
 
   # Clear the form
   clear_binary_automation_form:
@@ -1157,6 +1192,11 @@ input_text:
     initial: ""
     max: 100
 
+  temp_threshold_value:
+    name: "Temporary Threshold Value"
+    initial: "20"
+    max: 20
+
   temp_threshold_message:
     name: "Temporary Threshold Message"
     initial: ""
@@ -1182,6 +1222,12 @@ input_text:
     name: "Binary Automation Location"
     initial: ""
     max: 100
+
+  # Generated YAML storage (extended length)
+  generated_automation_yaml:
+    name: "Generated Automation YAML"
+    initial: ""
+    max: 8192
 
 input_boolean:
   # Threshold alerts system toggle
@@ -1237,13 +1283,7 @@ input_select:
     icon: mdi:state-machine
 
 input_number:
-  # Threshold form number input
-  temp_threshold_value:
-    name: "Temporary Threshold Value"
-    min: -999
-    max: 9999
-    step: 0.1
-    initial: 20
+  # Remove the threshold value number input - now using text field instead
 
 # ===================================
 # TEMPLATE SENSORS (CONSOLIDATED WITH UNIQUE IDs)
@@ -1308,7 +1348,7 @@ template:
         unique_id: "pkg_threshold_form_status"
         state: >
           {% set entity = states('input_text.temp_threshold_entity') %}
-          {% set value = states('input_number.temp_threshold_value') %}
+          {% set value = states('input_text.temp_threshold_value') %}
           {% if entity != '' and entity != 'unknown' %}
             {% if states(entity) != 'unknown' %}
               Ready to create
@@ -1448,70 +1488,7 @@ template:
             mdi:shield-remove
           {% endif %}
 
-      # Binary automation generator sensors
-      - name: "Generated Binary Automation YAML"
-        unique_id: "pkg_generated_binary_automation_yaml"
-        state: |
-          {% set entity = states('input_text.binary_automation_entity') %}
-          {% set message = states('input_text.binary_automation_message') %}
-          {% set location = states('input_text.binary_automation_location') %}
-          {% set trigger_state = states('input_select.binary_automation_trigger_state') %}
-          {% set level = states('input_select.binary_automation_level') %}
-          {% set channel = states('input_select.binary_automation_channel') %}
-          {% set domain = entity.split('.')[0] if entity else '' %}
-          {% set device_class = state_attr(entity, 'device_class') if entity else '' %}
-          {% if entity and message %}
-          {% set entity_name = state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title %}
-          {% set automation_name = entity_name + ' Alert' %}
-          {% set state_description = trigger_state %}
-          {% if trigger_state == 'on' %}
-            {% if domain == 'cover' %}
-              {% set state_description = 'opens' %}
-            {% elif device_class == 'door' %}
-              {% set state_description = 'opens' %}
-            {% elif device_class == 'window' %}
-              {% set state_description = 'opens' %}
-            {% elif device_class == 'motion' %}
-              {% set state_description = 'detects motion' %}
-            {% else %}
-              {% set state_description = 'becomes active' %}
-            {% endif %}
-          {% elif trigger_state == 'off' %}
-            {% if domain == 'cover' %}
-              {% set state_description = 'closes' %}
-            {% elif device_class == 'door' %}
-              {% set state_description = 'closes' %}
-            {% elif device_class == 'window' %}
-              {% set state_description = 'closes' %}
-            {% elif device_class == 'motion' %}
-              {% set state_description = 'motion clears' %}
-            {% else %}
-              {% set state_description = 'becomes inactive' %}
-            {% endif %}
-          {% else %}
-            {% set state_description = 'becomes unavailable' %}
-          {% endif %}
-          # Generated Binary Sensor Automation
-          alias: "{{ automation_name }}"
-          description: "Alert when {{ entity_name }} {{ state_description }}"
-          trigger:
-            - platform: state
-              entity_id: {{ entity }}
-              to: "{{ trigger_state }}"
-          condition: []
-          action:
-            - action: script.send_alert
-              data:
-                message: "{{ message }}"
-                level: "{{ level }}"
-                channel: "{{ channel }}"{% if location %}
-                location: "{{ location }}"{% endif %}
-          mode: single
-          {% else %}
-          # Please fill in the entity and message fields to generate automation YAML
-          {% endif %}
-        icon: mdi:code-braces
-
+      # Binary automation form status sensor
       - name: "Binary Automation Form Status"
         unique_id: "pkg_binary_automation_form_status"
         state: >
