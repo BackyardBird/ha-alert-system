@@ -1,5 +1,5 @@
 # packages/alert_system.yaml
-# Version: 2.1.2
+# Version: 2.1.3
 # Modern GUI-based Telegram integration version with dual-channel support
 # This file is IDENTICAL across all three houses
 # Only the chat IDs in the GUI integration and secrets differ per house
