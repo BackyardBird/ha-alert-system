@@ -1,15 +1,13 @@
 # packages/alert_system.yaml
-# Version: 2.1.5 - FIXED VERSION
-# Modern GUI-based Telegram integration version with dual-channel support
-# This file is IDENTICAL across all three houses
-# Only the chat IDs in the GUI integration and secrets differ per house
+# Version: 3.0.0 - SIMPLIFIED AND FIXED
+# Removed quick setup and discovery scripts for simplicity
+# Fixed all YAML syntax issues
 
 script:
   # ===================================
   # CORE ALERT SYSTEM SCRIPTS
   # ===================================
   
-  # Main alert script - this is your primary tool
   send_alert:
     alias: "Send Alert"
     description: "Send a formatted alert via Telegram"
@@ -40,29 +38,21 @@ script:
         default: "main"
     sequence:
       - variables:
-          level_emoji: >
-            {% if level == 'critical' %}🚨
-            {% elif level == 'warning' %}⚠️
-            {% else %}ℹ️{% endif %}
+          level_emoji: "{% if level == 'critical' %}🚨{% elif level == 'warning' %}⚠️{% else %}ℹ️{% endif %}"
           house_name: !secret house_name
-          timestamp: >
-            {% if include_timestamp | default(true) %}
-            {{ now().strftime('%H:%M') }}
-            {% endif %}
+          timestamp: "{% if include_timestamp | default(true) %}{{ now().strftime('%H:%M') }}{% endif %}"
           main_chat: !secret telegram_main_alerts
           tech_chat: !secret telegram_technical_alerts
       - choose:
-          # Custom chat_id overrides everything
           - conditions:
               - condition: template
                 value_template: "{{ chat_id is defined and chat_id != '' }}"
             sequence:
               - action: telegram_bot.send_message
                 data:
-                  target: "{{ chat_id | int }}"  # Safe: chat_id already validated as non-empty
+                  target: "{{ chat_id | int }}"
                   message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if location %}\n📍 {{ location | e }}{% endif %}"
                   parse_mode: "HTML"
-          # Main channel
           - conditions:
               - condition: template
                 value_template: "{{ channel == 'main' }}"
@@ -72,7 +62,6 @@ script:
                   target: "{{ main_chat | int }}"
                   message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if location %}\n📍 {{ location | e }}{% endif %}"
                   parse_mode: "HTML"
-          # Technical channel
           - conditions:
               - condition: template
                 value_template: "{{ channel == 'technical' }}"
@@ -82,7 +71,6 @@ script:
                   target: "{{ tech_chat | int }}"
                   message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if location %}\n📍 {{ location | e }}{% endif %}"
                   parse_mode: "HTML"
-          # Both channels
           - conditions:
               - condition: template
                 value_template: "{{ channel == 'both' }}"
@@ -97,16 +85,13 @@ script:
                   target: "{{ tech_chat | int }}"
                   message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if location %}\n📍 {{ location | e }}{% endif %}"
                   parse_mode: "HTML"
-
-        # Default fallback for invalid channels - send to technical channel
         default:
           - action: telegram_bot.send_message
             data:
               target: "{{ tech_chat | int }}"
               message: "<b>⚠️ {{ house_name|upper }} WARNING</b> {{ timestamp }}\n🚨 ALERT SYSTEM: Invalid channel '{{ channel }}' specified. Message sent to technical channel as fallback.\n\nOriginal message: {{ message | e }}{% if location %}\n📍 {{ location | e }}{% endif %}"
               parse_mode: "HTML"
-              
-  # Quick alert for simple notifications (main channel)
+
   quick_alert:
     alias: "Quick Alert"
     description: "Send a simple info-level alert to main channel"
@@ -118,916 +103,7 @@ script:
         description: "Specific chat ID (optional)"
         required: false
     sequence:
-      - action: script.tech_alert
-        data:
-          message: |
-            🔥 SAFETY SENSORS DISCOVERED
-            
-            Found {{ safety_sensors | length }} safety sensors:
-            {% for entity in safety_sensors %}
-            - {{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title }}
-              ID: {{ entity }}
-              Device Class: {{ state_attr(entity, 'device_class') or 'unknown' }}
-              Current: {{ states(entity) | title }}
-            {% endfor %}
-            
-            Copy any entity ID above to use in the binary automation generator.
-          level: info
-
-  discover_threshold_candidates:
-    alias: "Discover Threshold Alert Candidates"
-    description: "Find sensors suitable for threshold monitoring"
-    sequence:
-      - variables:
-          numeric_sensors: >
-            {% set ns = namespace(sensors=[]) %}
-            {% for entity in states.sensor %}
-              {% if entity.state | float(none) is not none %}
-                {% if entity.attributes.device_class in ['temperature', 'humidity', 'battery', 'pressure', 'power', 'energy', 'current', 'voltage'] %}
-                  {% set parts = item.split(':') %}
-              {% if parts | length >= 4 and parts[0] == triggered_entity %}
-                {% set ns.found = true %}
-              {% endif %}
-            {% endfor %}
-          {% endfor %}
-          {{ ns.found }}
-    action:
-      - variables:
-          all_entities: >
-            {% set ns = namespace(entities=[]) %}
-            {% for i in range(1, 4) %}
-              {% set helper_name = 'input_text.threshold_entities' + ('_' + i|string if i > 1 else '') %}
-              {% set entities_text = states(helper_name) %}
-              {% set entities_list = entities_text.split('|') if entities_text else [] %}
-              {% set ns.entities = ns.entities + entities_list %}
-            {% endfor %}
-            {{ ns.entities }}
-          triggered_entity: "{{ trigger.entity_id }}"
-          new_state: "{{ trigger.to_state.state }}"
-          old_state: "{{ trigger.from_state.state if trigger.from_state else 'unknown' }}"
-      
-      - repeat:
-          for_each: "{{ all_entities }}"
-          sequence:
-            - variables:
-                parts: "{{ repeat.item.split(':') }}"
-                monitor_entity: "{{ parts[0] if parts | length >= 4 else '' }}"
-                threshold_value: "{{ parts[1] | float if parts | length >= 4 else 0 }}"
-                condition_type: "{{ parts[2] if parts | length >= 4 else 'above' }}"
-                alert_message: "{{ parts[3:] | join(':') if parts | length >= 4 else 'Threshold alert' }}"
-            
-            - condition: template
-              value_template: "{{ monitor_entity == triggered_entity }}"
-            
-            - condition: template
-              value_template: >
-                {% set current_val = new_state | float(0) %}
-                {% set old_val = old_state | float(0) %}
-                {% set threshold = threshold_value %}
-                
-                {% if condition_type == 'above' %}
-                  {{ current_val > threshold and old_val <= threshold }}
-                {% else %}
-                  {{ current_val < threshold and old_val >= threshold }}
-                {% endif %}
-            
-            - variables:
-                entity_name: "{{ state_attr(monitor_entity, 'friendly_name') or monitor_entity.split('.')[1] | replace('_', ' ') | title }}"
-                current_value: "{{ new_state }}"
-                unit: "{{ state_attr(monitor_entity, 'unit_of_measurement') or '' }}"
-                alert_channel: "{{ states('input_select.threshold_alert_channel') }}"
-            
-            - action: script.send_alert
-              data:
-                message: >
-                  🚨 {{ alert_message }}
-                  
-                  Current value: {{ current_value }} {{ unit }}
-                  Threshold: {{ condition_type }} {{ threshold_value }} {{ unit }}
-                level: warning
-                channel: "{{ alert_channel }}"
-                location: "{{ entity_name }}"
-
-  - alias: "Update Threshold Alert Triggers"
-    id: "update_threshold_alert_triggers"
-    description: "Update automation triggers when threshold entities change"
-    trigger:
-      - platform: state
-        entity_id: 
-          - input_text.threshold_entities
-          - input_text.threshold_entities_2
-          - input_text.threshold_entities_3
-    action:
-      - action: script.tech_alert
-        data:
-          message: "Threshold entities updated. Changes are now active."
-          level: info ns.sensors = ns.sensors + [entity.entity_id] %}
-                {% endif %}
-              {% endif %}
-            {% endfor %}
-            {{ ns.sensors[:20] }}
-      
-      - action: script.tech_alert
-        data:
-          message: |
-            🔍 THRESHOLD ALERT CANDIDATES
-            
-            Found {{ numeric_sensors | length }} suitable sensors:
-            {% for entity in numeric_sensors %}
-            - {{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title }}
-              ID: {{ entity }}
-              Current: {{ states(entity) }}{{ state_attr(entity, 'unit_of_measurement') or '' }}
-            {% endfor %}
-            
-            Use these entity IDs in the threshold alert form above.
-          level: info
-
-  # ===================================
-  # BINARY SENSOR AUTOMATION GENERATOR SCRIPTS
-  # ===================================
-  
-  # Helper script to select entity from browser
-  select_binary_entity:
-    alias: "Select Binary Entity"
-    description: "Helper to select entity from browser and auto-fill form"
-    fields:
-      entity_id:
-        description: "Entity ID to select"
-        required: true
-    sequence:
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.binary_automation_entity
-        data:
-          value: "{{ entity_id }}"
-      
-      - variables:
-          entity_name: "{{ state_attr(entity_id, 'friendly_name') or entity_id.split('.')[1] | replace('_', ' ') | title }}"
-          device_class: "{{ state_attr(entity_id, 'device_class') or 'unknown' }}"
-          domain: "{{ entity_id.split('.')[0] }}"
-          
-          # Smart defaults based on device class and domain
-          default_message: >
-            {% if domain == 'cover' %}
-              {% if device_class in ['door', 'garage'] %}
-                {{ entity_name }} opened
-              {% elif device_class == 'window' %}
-                {{ entity_name }} opened
-              {% else %}
-                {{ entity_name }} opened
-              {% endif %}
-            {% elif device_class == 'door' %}
-              {{ entity_name }} opened
-            {% elif device_class == 'window' %}
-              {{ entity_name }} opened
-            {% elif device_class == 'motion' %}
-              Motion detected in {{ entity_name.replace(' Motion', '').replace(' Sensor', '') }}
-            {% elif device_class in ['smoke', 'gas'] %}
-              {{ device_class.title() }} detected - {{ entity_name }}!
-            {% elif device_class == 'problem' %}
-              Problem detected: {{ entity_name }}
-            {% else %}
-              {{ entity_name }} activated
-            {% endif %}
-          
-          default_level: >
-            {% if device_class in ['smoke', 'gas', 'safety'] %}
-              critical
-            {% elif device_class == 'problem' %}
-              warning
-            {% else %}
-              info
-            {% endif %}
-          
-          default_trigger_state: >
-            {% if domain == 'cover' %}
-              on
-            {% elif device_class in ['door', 'window'] %}
-              on
-            {% elif device_class == 'motion' %}
-              on
-            {% else %}
-              on
-            {% endif %}
-      
-      # Set smart defaults
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.binary_automation_message
-        data:
-          value: "{{ default_message }}"
-      
-      - action: input_select.select_option
-        target:
-          entity_id: input_select.binary_automation_level
-        data:
-          option: "{{ default_level }}"
-      
-      - action: input_select.select_option
-        target:
-          entity_id: input_select.binary_automation_trigger_state
-        data:
-          option: "{{ default_trigger_state }}"
-
-  # Generate and display the YAML - IMPROVED VERSION
-  generate_binary_automation_yaml:
-    alias: "Generate Binary Automation YAML"
-    description: "Generate automation YAML with improved validation"
-    sequence:
-      - variables:
-          entity: "{{ states('input_text.binary_automation_entity') }}"
-          message: "{{ states('input_text.binary_automation_message') }}"
-          location: "{{ states('input_text.binary_automation_location') }}"
-          trigger_state: "{{ states('input_select.binary_automation_trigger_state') }}"
-          level: "{{ states('input_select.binary_automation_level') }}"
-          channel: "{{ states('input_select.binary_automation_channel') }}"
-      
-      # IMPROVED: Better validation with specific error messages
-      - choose:
-          - conditions:
-              - condition: template
-                value_template: "{{ entity == '' or entity == 'unknown' or entity == 'unavailable' }}"
-            sequence:
-              - action: persistent_notification.create
-                data:
-                  title: "❌ Missing Entity ID"
-                  message: |
-                    **Please enter a binary sensor entity ID**
-                    
-                    **How to find entity IDs:**
-                    1. Use the discovery buttons below
-                    2. Go to Developer Tools → States
-                    3. Filter by "binary_sensor."
-                    4. Copy the entity_id (like `binary_sensor.front_door`)
-                    
-                    **Current value**: "{{ entity }}"
-                  notification_id: "yaml_error"
-          - conditions:
-              - condition: template
-                value_template: "{{ entity.count('.') != 1 }}"
-            sequence:
-              - action: persistent_notification.create
-                data:
-                  title: "❌ Invalid Entity Format"
-                  message: |
-                    **Entity ID format is incorrect**
-                    
-                    **Expected format**: `domain.entity_name`
-                    **Example**: `binary_sensor.front_door`
-                    **Current value**: "{{ entity }}"
-                  notification_id: "yaml_error"
-          - conditions:
-              - condition: template
-                value_template: "{{ not entity.startswith('binary_sensor.') }}"
-            sequence:
-              - action: persistent_notification.create
-                data:
-                  title: "❌ Not a Binary Sensor"
-                  message: |
-                    **Entity must be a binary sensor**
-                    
-                    **Expected**: Entity ID starting with `binary_sensor.`
-                    **Current**: "{{ entity }}"
-                    
-                    Use the discovery buttons to find binary sensors.
-                  notification_id: "yaml_error"
-          - conditions:
-              - condition: template
-                value_template: "{{ states(entity) in ['unknown', 'unavailable'] }}"
-            sequence:
-              - action: persistent_notification.create
-                data:
-                  title: "❌ Entity Not Found"
-                  message: |
-                    **Entity "{{ entity }}" not found or unavailable**
-                    
-                    **Possible causes:**
-                    - Entity doesn't exist in your system
-                    - Typo in entity name
-                    - Device is offline
-                    
-                    **Solutions:**
-                    - Check spelling carefully
-                    - Use discovery buttons to find correct entity IDs
-                    - Verify device is online
-                  notification_id: "yaml_error"
-          - conditions:
-              - condition: template
-                value_template: "{{ message == '' or message == 'unknown' or message == 'unavailable' }}"
-            sequence:
-              - action: persistent_notification.create
-                data:
-                  title: "❌ Missing Alert Message"
-                  message: |
-                    **Please enter an alert message**
-                    
-                    **Examples:**
-                    - "Front door opened"
-                    - "Motion detected in living room"
-                    - "Smoke detector triggered!"
-                    
-                    The message will be sent to Telegram when the automation triggers.
-                  notification_id: "yaml_error"
-        # SUCCESS CASE: Generate YAML
-        default:
-          - variables:
-              entity_name: "{{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title }}"
-              domain: "{{ entity.split('.')[0] }}"
-              device_class: "{{ state_attr(entity, 'device_class') or 'unknown' }}"
-              automation_name: "{{ entity_name }} Alert"
-              
-              state_description: >
-                {% if trigger_state == 'on' %}
-                  {% if domain == 'cover' %}opens
-                  {% elif device_class == 'door' %}opens
-                  {% elif device_class == 'window' %}opens  
-                  {% elif device_class == 'motion' %}detects motion
-                  {% else %}becomes active{% endif %}
-                {% elif trigger_state == 'off' %}
-                  {% if domain == 'cover' %}closes
-                  {% elif device_class == 'door' %}closes
-                  {% elif device_class == 'window' %}closes
-                  {% elif device_class == 'motion' %}motion clears
-                  {% else %}becomes inactive{% endif %}
-                {% else %}becomes unavailable{% endif %}
-              
-              yaml_content: |
-                # Generated Binary Sensor Automation
-                alias: "{{ automation_name }}"
-                description: "Alert when {{ entity_name }} {{ state_description }}"
-                trigger:
-                  - platform: state
-                    entity_id: {{ entity }}
-                    to: "{{ trigger_state }}"
-                condition: []
-                action:
-                  - action: script.send_alert
-                    data:
-                      message: "{{ message }}"
-                      level: "{{ level }}"
-                      channel: "{{ channel }}"{% if location %}
-                      location: "{{ location }}"{% endif %}
-                mode: single
-          
-          - action: input_text.set_value
-            target:
-              entity_id: input_text.generated_automation_yaml
-            data:
-              value: "{{ yaml_content }}"
-          
-          - action: persistent_notification.create
-            data:
-              title: "✅ Automation YAML Generated"
-              message: |
-                **Generated automation for {{ entity_name }}**
-                
-                📋 The YAML code is now ready in the display card above.
-                
-                **Next Steps:**
-                1. Copy the YAML from the card above
-                2. Settings → Automations & Scenes → Create Automation  
-                3. Create new automation → ⋮ menu → Edit in YAML
-                4. Paste and save
-                
-                **Settings:** {{ trigger_state | title }}, {{ level | title }}, {{ channel | title }}
-                **Current State:** {{ states(entity) | title }}
-              notification_id: "yaml_generated"
-
-  # Clear the form
-  clear_binary_automation_form:
-    alias: "Clear Binary Automation Form"
-    description: "Reset all form fields"
-    sequence:
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.binary_automation_entity
-        data:
-          value: ""
-      
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.binary_automation_message
-        data:
-          value: ""
-      
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.binary_automation_location
-        data:
-          value: ""
-      
-      - action: input_select.select_option
-        target:
-          entity_id: input_select.binary_automation_trigger_state
-        data:
-          option: "on"
-      
-      - action: input_select.select_option
-        target:
-          entity_id: input_select.binary_automation_level
-        data:
-          option: "warning"
-      
-      - action: input_select.select_option
-        target:
-          entity_id: input_select.binary_automation_channel
-        data:
-          option: "main"
-
-  # Quick presets for common scenarios
-  preset_door_alert:
-    alias: "Preset: Door Alert"
-    description: "Quick preset for door opening alerts"
-    sequence:
-      - action: input_select.select_option
-        target:
-          entity_id: input_select.binary_automation_trigger_state
-        data:
-          option: "on"
-      - action: input_select.select_option
-        target:
-          entity_id: input_select.binary_automation_level
-        data:
-          option: "info"
-      - action: script.tech_alert
-        data:
-          message: "Door alert preset applied. Select a door sensor from the browser below."
-          level: info
-
-  preset_security_alert:
-    alias: "Preset: Security Alert"
-    description: "Quick preset for security-related alerts"
-    sequence:
-      - action: input_select.select_option
-        target:
-          entity_id: input_select.binary_automation_trigger_state
-        data:
-          option: "on"
-      - action: input_select.select_option
-        target:
-          entity_id: input_select.binary_automation_level
-        data:
-          option: "critical"
-      - action: input_select.select_option
-        target:
-          entity_id: input_select.binary_automation_channel
-        data:
-          option: "both"
-      - action: script.tech_alert
-        data:
-          message: "Security alert preset applied. Select a safety sensor from the browser below."
-          level: info
-
-  # NEW: Helper script to validate entity during typing
-  validate_entity_input:
-    alias: "Validate Entity Input"
-    description: "Real-time validation helper"
-    fields:
-      entity_id:
-        description: "Entity to validate"
-        required: true
-    sequence:
-      - variables:
-          validation_result: >
-            {% if entity_id == '' or entity_id == 'unavailable' %}
-              empty
-            {% elif entity_id.count('.') != 1 %}
-              invalid_format
-            {% elif not entity_id.startswith(('sensor.', 'binary_sensor.', 'switch.', 'light.', 'cover.')) %}
-              unknown_domain
-            {% elif states(entity_id) in ['unknown', 'unavailable'] %}
-              not_found
-            {% else %}
-              valid
-            {% endif %}
-      
-      - choose:
-          - conditions:
-              - condition: template
-                value_template: "{{ validation_result == 'valid' }}"
-            sequence:
-              - action: script.tech_alert
-                data:
-                  message: "✅ Entity {{ state_attr(entity_id, 'friendly_name') or entity_id }} found and available"
-                  level: info
-        default:
-          - action: script.tech_alert
-            data:
-              message: >
-                {% if validation_result == 'empty' %}
-                ℹ️ Enter an entity ID to validate
-                {% elif validation_result == 'invalid_format' %}
-                ❌ Invalid format. Use: domain.entity_name
-                {% elif validation_result == 'unknown_domain' %}
-                ⚠️ Unusual domain. Expected: sensor, binary_sensor, switch, etc.
-                {% elif validation_result == 'not_found' %}
-                ❌ Entity "{{ entity_id }}" not found
-                {% endif %}
-              level: warning
-
-# ===================================
-# INPUT HELPERS (CONSOLIDATED) - FIXED VERSION
-# ===================================
-
-input_text:
-  # Threshold alert storage helpers
-  threshold_entities:
-    name: "Threshold Alert Entities"
-    initial: ""
-    max: 255
-
-  threshold_entities_2:
-    name: "Threshold Alert Entities (Group 2)"
-    initial: ""
-    max: 255
-
-  threshold_entities_3:
-    name: "Threshold Alert Entities (Group 3)" 
-    initial: ""
-    max: 255
-
-  # Threshold form input helpers - FIXED
-  temp_threshold_entity:
-    name: "Temporary Threshold Entity"
-    initial: ""  # Changed from showing "unavailable"
-    max: 100
-    pattern: "^[a-z_]+\\.[a-z0-9_]+$"  # Basic entity ID validation
-
-  temp_threshold_value:
-    name: "Temporary Threshold Value"
-    initial: "20"
-    max: 20
-
-  temp_threshold_message:
-    name: "Temporary Threshold Message"
-    initial: ""
-    max: 200
-
-  temp_remove_entity:
-    name: "Temporary Remove Entity"
-    initial: ""  # Changed from showing "unavailable"
-    max: 100
-    pattern: "^[a-z_]+\\.[a-z0-9_]+$"  # Basic entity ID validation
-
-  # Binary automation form inputs - FIXED
-  binary_automation_entity:
-    name: "Binary Automation Entity"
-    initial: ""  # Changed from showing "unavailable"
-    max: 100
-    pattern: "^binary_sensor\\.[a-z0-9_]+$"  # Binary sensor validation
-
-  binary_automation_message:
-    name: "Binary Automation Message"
-    initial: ""
-    max: 200
-
-  binary_automation_location:
-    name: "Binary Automation Location"
-    initial: ""
-    max: 100
-
-  # Generated YAML storage (extended length)
-  generated_automation_yaml:
-    name: "Generated Automation YAML"
-    initial: ""
-    max: 8192
-
-input_boolean:
-  # Threshold alerts system toggle
-  threshold_alerts_enabled:
-    name: "Enable Threshold Alerts"
-    initial: true
-    icon: mdi:alert-circle
-
-input_select:
-  # Threshold alert selectors
-  threshold_alert_channel:
-    name: "Default Alert Channel"
-    options:
-      - main
-      - technical
-      - both
-    initial: main
-    icon: mdi:message-alert
-
-  temp_threshold_condition:
-    name: "Temporary Threshold Condition"
-    options:
-      - "above"
-      - "below"
-    initial: "above"
-
-  # Binary automation selectors
-  binary_automation_level:
-    name: "Binary Automation Alert Level"
-    options:
-      - info
-      - warning
-      - critical
-    initial: warning
-    icon: mdi:alert
-
-  binary_automation_channel:
-    name: "Binary Automation Alert Channel"
-    options:
-      - main
-      - technical
-      - both
-    initial: main
-    icon: mdi:message-alert
-
-  binary_automation_trigger_state:
-    name: "Binary Automation Trigger State"
-    options:
-      - "on"
-      - "off"  
-      - "unavailable"
-    initial: "on"
-    icon: mdi:state-machine
-
-# ===================================
-# TEMPLATE SENSORS (CONSOLIDATED WITH UNIQUE IDs)
-# ===================================
-
-template:
-  - sensor:
-      # Threshold alert monitoring sensors
-      - name: "Threshold Alert Count"
-        unique_id: "pkg_threshold_alert_count"
-        state: >
-          {% set count = 0 %}
-          {% for i in range(1, 4) %}
-            {% set entity_name = 'input_text.threshold_entities' + ('_' + i|string if i > 1 else '') %}
-            {% set entities = states(entity_name) %}
-            {% if entities %}
-              {% set count = count + entities.split('|') | length %}
-            {% endif %}
-          {% endfor %}
-          {{ count }}
-        icon: mdi:counter
-        
-      - name: "Threshold Alert Status"
-        unique_id: "pkg_threshold_alert_status"
-        state: >
-          {% if is_state('input_boolean.threshold_alerts_enabled', 'on') %}
-            {% set count = states('sensor.threshold_alert_count') | int %}
-            {% if count > 0 %}
-              Monitoring {{ count }} entities
-            {% else %}
-              No entities configured
-            {% endif %}
-          {% else %}
-            Disabled
-          {% endif %}
-        icon: mdi:shield-check
-
-      - name: "Low Battery Devices"
-        unique_id: "pkg_low_battery_devices"
-        state: >
-          {% set ns = namespace(count=0) %}
-          {% for entity in states.sensor %}
-            {% if entity.attributes.device_class == 'battery' and entity.state | float(101) < 20 %}
-              {% set ns.count = ns.count + 1 %}
-            {% endif %}
-          {% endfor %}
-          {{ ns.count }}
-        attributes:
-          devices: >
-            {% set ns = namespace(devices=[]) %}
-            {% for entity in states.sensor %}
-              {% if entity.attributes.device_class == 'battery' and entity.state | float(101) < 20 %}
-                {% set device_name = entity.attributes.friendly_name or entity.entity_id.split('.')[1] | replace('_', ' ') | title %}
-                {% set ns.devices = ns.devices + [device_name + ': ' + entity.state + '%'] %}
-              {% endif %}
-            {% endfor %}
-            {{ ns.devices }}
-        icon: mdi:battery-alert
-        unit_of_measurement: "devices"
-
-      - name: "Threshold Alert Form Status"
-        unique_id: "pkg_threshold_form_status"
-        state: >
-          {% set entity = states('input_text.temp_threshold_entity') %}
-          {% set value = states('input_text.temp_threshold_value') %}
-          {% if entity != '' and entity != 'unknown' %}
-            {% if states(entity) != 'unknown' %}
-              Ready to create
-            {% else %}
-              Invalid entity
-            {% endif %}
-          {% else %}
-            Enter entity ID
-          {% endif %}
-        attributes:
-          entity_valid: >
-            {% set entity = states('input_text.temp_threshold_entity') %}
-            {{ entity != '' and entity != 'unknown' and states(entity) != 'unknown' }}
-          current_value: >
-            {% set entity = states('input_text.temp_threshold_entity') %}
-            {% if entity != '' and entity != 'unknown' and states(entity) != 'unknown' %}
-              {{ states(entity) }}{{ state_attr(entity, 'unit_of_measurement') or '' }}
-            {% else %}
-              N/A
-            {% endif %}
-          suggested_threshold: >
-            {% set entity = states('input_text.temp_threshold_entity') %}
-            {% if entity != '' and entity != 'unknown' and states(entity) != 'unknown' %}
-              {% set device_class = state_attr(entity, 'device_class') %}
-              {% if device_class == 'battery' %}
-                20 (below)
-              {% elif device_class == 'temperature' %}
-                25 (above) or 18 (below)
-              {% elif device_class == 'humidity' %}
-                70 (above) or 30 (below)
-              {% else %}
-                Set based on normal range
-              {% endif %}
-            {% else %}
-              N/A
-            {% endif %}
-        icon: mdi:form-select
-
-      - name: "Threshold Storage Usage"
-        unique_id: "pkg_threshold_storage_usage"
-        state: >
-          {% set total_chars = 0 %}
-          {% set max_chars = 765 %}
-          {% for i in range(1, 4) %}
-            {% set helper_name = 'input_text.threshold_entities' + ('_' + i|string if i > 1 else '') %}
-            {% set content = states(helper_name) %}
-            {% if content %}
-              {% set total_chars = total_chars + content | length %}
-            {% endif %}
-          {% endfor %}
-          {{ (total_chars / max_chars * 100) | round(1) }}
-        attributes:
-          total_characters: >
-            {% set total_chars = 0 %}
-            {% for i in range(1, 4) %}
-              {% set helper_name = 'input_text.threshold_entities' + ('_' + i|string if i > 1 else '') %}
-              {% set content = states(helper_name) %}
-              {% if content %}
-                {% set total_chars = total_chars + content | length %}
-              {% endif %}
-            {% endfor %}
-            {{ total_chars }}
-          max_characters: 765
-          helper_1_usage: "{{ states('input_text.threshold_entities') | length }}/255"
-          helper_2_usage: "{{ states('input_text.threshold_entities_2') | length }}/255"  
-          helper_3_usage: "{{ states('input_text.threshold_entities_3') | length }}/255"
-        icon: mdi:gauge
-        unit_of_measurement: "%"
-
-      - name: "Threshold System Health"
-        unique_id: "pkg_threshold_system_health"
-        state: >
-          {% set issues = [] %}
-          
-          {% if not is_state('input_boolean.threshold_alerts_enabled', 'on') %}
-            {% set issues = issues + ['System disabled'] %}
-          {% endif %}
-          
-          {% set total_entities = states('sensor.threshold_alert_count') | int %}
-          {% if total_entities == 0 %}
-            {% set issues = issues + ['No entities configured'] %}
-          {% endif %}
-          
-          {% set storage_usage = states('sensor.threshold_storage_usage') | float(0) %}
-          {% if storage_usage > 90 %}
-            {% set issues = issues + ['Storage nearly full'] %}
-          {% endif %}
-          
-          {% set invalid_count = 0 %}
-          {% for i in range(1, 4) %}
-            {% set helper_name = 'input_text.threshold_entities' + ('_' + i|string if i > 1 else '') %}
-            {% set entities_text = states(helper_name) %}
-            {% set entities_list = entities_text.split('|') if entities_text else [] %}
-            {% for item in entities_list %}
-              {% set parts = item.split(':') %}
-              {% if parts | length >= 4 %}
-                {% set entity = parts[0] %}
-                {% if states(entity) == 'unknown' %}
-                  {% set invalid_count = invalid_count + 1 %}
-                {% endif %}
-              {% endif %}
-            {% endfor %}
-          {% endfor %}
-          
-          {% if invalid_count > 0 %}
-            {% set issues = issues + [invalid_count ~ ' invalid entities'] %}
-          {% endif %}
-          
-          {% if issues | length == 0 %}
-            Healthy
-          {% else %}
-            {{ issues | length }} issues
-          {% endif %}
-        attributes:
-          issues: >
-            {% set issues = [] %}
-            {% if not is_state('input_boolean.threshold_alerts_enabled', 'on') %}
-              {% set issues = issues + ['System disabled'] %}
-            {% endif %}
-            {% set total_entities = states('sensor.threshold_alert_count') | int %}
-            {% if total_entities == 0 %}
-              {% set issues = issues + ['No entities configured'] %}
-            {% endif %}
-            {% set storage_usage = states('sensor.threshold_storage_usage') | float(0) %}
-            {% if storage_usage > 90 %}
-              {% set issues = issues + ['Storage nearly full (' ~ storage_usage ~ '%)'] %}
-            {% endif %}
-            {{ issues }}
-          last_checked: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
-        icon: >
-          {% set issues = (state_attr('sensor.threshold_system_health', 'issues') or []) | length %}
-          {% if issues == 0 %}
-            mdi:shield-check
-          {% elif issues <= 2 %}
-            mdi:shield-alert
-          {% else %}
-            mdi:shield-remove
-          {% endif %}
-
-      # Binary automation form status sensor
-      - name: "Binary Automation Form Status"
-        unique_id: "pkg_binary_automation_form_status"
-        state: >
-          {% set entity = states('input_text.binary_automation_entity') %}
-          {% set message = states('input_text.binary_automation_message') %}
-          {% if entity != '' and entity != 'unknown' and message != '' and message != 'unknown' %}
-            {% if states(entity) != 'unknown' %}
-              Ready to generate
-            {% else %}
-              Invalid entity
-            {% endif %}
-          {% else %}
-            Fill required fields
-          {% endif %}
-        attributes:
-          entity_valid: >
-            {% set entity = states('input_text.binary_automation_entity') %}
-            {{ entity != '' and entity != 'unknown' and states(entity) != 'unknown' }}
-          message_valid: >
-            {% set message = states('input_text.binary_automation_message') %}
-            {{ message != '' and message != 'unknown' }}
-          form_complete: >
-            {% set entity = states('input_text.binary_automation_entity') %}
-            {% set message = states('input_text.binary_automation_message') %}
-            {{ entity != '' and entity != 'unknown' and message != '' and message != 'unknown' and states(entity) != 'unknown' }}
-          current_state: >
-            {% set entity = states('input_text.binary_automation_entity') %}
-            {% if entity != '' and entity != 'unknown' and states(entity) != 'unknown' %}
-              {{ states(entity) | title }}
-            {% else %}
-              N/A
-            {% endif %}
-          state_descriptions: >
-            {% set entity = states('input_text.binary_automation_entity') %}
-            {% if entity != '' and entity != 'unknown' and states(entity) != 'unknown' %}
-              {% set domain = entity.split('.')[0] %}
-              {% set device_class = state_attr(entity, 'device_class') or 'unknown' %}
-              {% if domain == 'cover' %}
-                ON = Opens, OFF = Closes, UNAVAILABLE = Connection Lost
-              {% elif device_class == 'door' %}
-                ON = Opens, OFF = Closes, UNAVAILABLE = Connection Lost
-              {% elif device_class == 'window' %}
-                ON = Opens, OFF = Closes, UNAVAILABLE = Connection Lost
-              {% elif device_class == 'motion' %}
-                ON = Motion Detected, OFF = Motion Clear, UNAVAILABLE = Connection Lost
-              {% else %}
-                ON = Active, OFF = Inactive, UNAVAILABLE = Connection Lost
-              {% endif %}
-            {% else %}
-              N/A
-            {% endif %}
-        icon: mdi:form-select
-
-# ===================================
-# AUTOMATIONS 
-# ===================================
-
-automation:
-  - alias: "Threshold Alert Monitor"
-    id: "threshold_alert_monitor"
-    description: "Monitor entities for threshold breaches - Universal trigger with smart filtering"
-    trigger:
-      - platform: state
-        entity_id: sensor.*  # Universal trigger - filtered by conditions for efficiency
-    condition:
-      - condition: state
-        entity_id: input_boolean.threshold_alerts_enabled
-        state: 'on'
-      - condition: template
-        value_template: >
-          {# Only proceed if this entity is actually being monitored #}
-          {% set triggered_entity = trigger.entity_id %}
-          {% set ns = namespace(found=false) %}
-          {% for i in range(1, 4) %}
-            {% set helper_name = 'input_text.threshold_entities' + ('_' + i|string if i > 1 else '') %}
-            {% set entities_text = states(helper_name) %}
-            {% set entities_list = entities_text.split('|') if entities_text else [] %}
-            {% for item in entities_list %}
-              {% set.send_alert
+      - action: script.send_alert
         data:
           message: "{{ message }}"
           level: "info"
@@ -1035,7 +111,6 @@ automation:
           chat_id: "{{ chat_id | default('') }}"
           include_timestamp: true
 
-  # System alert for technical issues (technical channel by default)
   system_alert:
     alias: "System Alert"
     description: "Send a system-level alert to technical channel"
@@ -1062,7 +137,6 @@ automation:
           location: ""
           include_timestamp: true
 
-  # Security alert for security-related events (both channels)
   security_alert:
     alias: "Security Alert"
     description: "Send a security alert to both channels"
@@ -1086,7 +160,6 @@ automation:
           chat_id: "{{ chat_id | default('') }}"
           include_timestamp: true
 
-  # Device alert for device-specific notifications (technical channel by default)
   device_alert:
     alias: "Device Alert"
     description: "Send a device-related alert to technical channel"
@@ -1116,47 +189,6 @@ automation:
           location: ""
           include_timestamp: true
 
-  # Bulk alert for sending multiple alerts
-  bulk_alert:
-    alias: "Bulk Alert"
-    description: "Send multiple alerts at once"
-    fields:
-      alerts:
-        description: "List of alerts to send"
-        required: true
-    sequence:
-      - repeat:
-          for_each: "{{ alerts }}"
-          sequence:
-            - action: script.send_alert
-              data:
-                message: "{{ repeat.item.message }}"
-                level: "{{ repeat.item.level | default('info') }}"
-                location: "{{ repeat.item.location | default('') }}"
-                channel: "{{ repeat.item.channel | default('main') }}"
-                chat_id: "{{ repeat.item.chat_id | default('') }}"
-
-  # Test alert to verify system is working (both channels)
-  test_alert:
-    alias: "Test Alert System"
-    description: "Send a test alert to verify the system is working"
-    fields:
-      chat_id:
-        description: "Specific chat ID to test (optional)"
-        required: false
-      channel:
-        description: "Channel to test (main/technical/both)"
-        default: "both"
-    sequence:
-      - action: script.send_alert
-        data:
-          message: "Alert system test - everything is working correctly! 🎉"
-          level: "info"
-          channel: "{{ channel | default('both') }}"
-          chat_id: "{{ chat_id | default('') }}"
-          include_timestamp: true
-
-  # Technical-specific convenience scripts
   tech_alert:
     alias: "Technical Alert"
     description: "Send alert specifically to technical channel"
@@ -1201,11 +233,29 @@ automation:
           channel: "main"
           include_timestamp: true
 
+  test_alert:
+    alias: "Test Alert System"
+    description: "Send a test alert to verify the system is working"
+    fields:
+      chat_id:
+        description: "Specific chat ID to test (optional)"
+        required: false
+      channel:
+        description: "Channel to test (main/technical/both)"
+        default: "both"
+    sequence:
+      - action: script.send_alert
+        data:
+          message: "Alert system test - everything is working correctly! 🎉"
+          level: "info"
+          channel: "{{ channel | default('both') }}"
+          chat_id: "{{ chat_id | default('') }}"
+          include_timestamp: true
+
   # ===================================
   # THRESHOLD ALERT SYSTEM SCRIPTS
   # ===================================
-  
-  # Threshold alert management scripts
+
   add_threshold_alert:
     alias: "Add Threshold Alert"
     description: "Add an entity to threshold monitoring"
@@ -1222,11 +272,6 @@ automation:
         description: "Trigger condition"
         required: true
         example: "above"
-        selector:
-          select:
-            options:
-              - "above"
-              - "below"
       custom_message:
         description: "Custom alert message (optional)"
         required: false
@@ -1234,36 +279,11 @@ automation:
     sequence:
       - variables:
           entity_name: "{{ state_attr(entity_id, 'friendly_name') or entity_id.split('.')[1] | replace('_', ' ') | title }}"
-          default_message: >
-            {% if condition == 'above' %}
-              {{ entity_name }} is above threshold
-            {% else %}
-              {{ entity_name }} is below threshold
-            {% endif %}
+          default_message: "{% if condition == 'above' %}{{ entity_name }} is above threshold{% else %}{{ entity_name }} is below threshold{% endif %}"
           alert_message: "{{ custom_message if custom_message else default_message }}"
           new_entry: "{{ entity_id }}:{{ threshold }}:{{ condition }}:{{ alert_message }}"
-          
-          # Find which input_text helper has space
-          target_helper: >
-            {% for i in range(1, 4) %}
-              {% set helper_name = 'input_text.threshold_entities' + ('_' + i|string if i > 1 else '') %}
-              {% set current_content = states(helper_name) %}
-              {% set new_content = current_content + ('|' if current_content else '') + new_entry %}
-              {% if new_content | length <= 250 %}
-                {{ helper_name }}
-                {%- break -%}
-              {% endif %}
-            {% endfor %}
-          
-          updated_entities: >
-            {% set helper = target_helper %}
-            {% set current_content = states(helper) %}
-            {% if current_content %}
-              {{ current_content }}|{{ new_entry }}
-            {% else %}
-              {{ new_entry }}
-            {% endif %}
-      
+          target_helper: "{% for i in range(1, 4) %}{% set helper_name = 'input_text.threshold_entities' + ('_' + i|string if i > 1 else '') %}{% set current_content = states(helper_name) %}{% set new_content = current_content + ('|' if current_content else '') + new_entry %}{% if new_content | length <= 250 %}{{ helper_name }}{%- break -%}{% endif %}{% endfor %}"
+          updated_entities: "{% set helper = target_helper %}{% set current_content = states(helper) %}{% if current_content %}{{ current_content }}|{{ new_entry }}{% else %}{{ new_entry }}{% endif %}"
       - if:
           - condition: template
             value_template: "{{ target_helper != '' }}"
@@ -1273,7 +293,6 @@ automation:
               entity_id: "{{ target_helper }}"
             data:
               value: "{{ updated_entities }}"
-          
           - action: script.tech_alert
             data:
               message: "Added threshold alert for {{ entity_name }}: {{ condition }} {{ threshold }}"
@@ -1293,36 +312,8 @@ automation:
         required: true
     sequence:
       - variables:
-          # Check all helpers for the entity
-          found_helper: >
-            {% set ns = namespace(helper='') %}
-            {% for i in range(1, 4) %}
-              {% set helper_name = 'input_text.threshold_entities' + ('_' + i|string if i > 1 else '') %}
-              {% set current_entities = states(helper_name) %}
-              {% set entities_list = current_entities.split('|') if current_entities else [] %}
-              {% for item in entities_list %}
-                {% if item.split(':')[0] == entity_id and ns.helper == '' %}
-                  {% set ns.helper = helper_name %}
-                {% endif %}
-              {% endfor %}
-            {% endfor %}
-            {{ ns.helper }}
-          
-          filtered_entities: >
-            {% if found_helper %}
-              {% set current_entities = states(found_helper) %}
-              {% set entities_list = current_entities.split('|') if current_entities else [] %}
-              {% set ns = namespace(items=[]) %}
-              {% for item in entities_list %}
-                {% if item.split(':')[0] != entity_id %}
-                  {% set ns.items = ns.items + [item] %}
-                {% endif %}
-              {% endfor %}
-              {{ ns.items | join('|') }}
-            {% else %}
-              
-            {% endif %}
-      
+          found_helper: "{% set ns = namespace(helper='') %}{% for i in range(1, 4) %}{% set helper_name = 'input_text.threshold_entities' + ('_' + i|string if i > 1 else '') %}{% set current_entities = states(helper_name) %}{% set entities_list = current_entities.split('|') if current_entities else [] %}{% for item in entities_list %}{% if item.split(':')[0] == entity_id and ns.helper == '' %}{% set ns.helper = helper_name %}{% endif %}{% endfor %}{% endfor %}{{ ns.helper }}"
+          filtered_entities: "{% if found_helper %}{% set current_entities = states(found_helper) %}{% set entities_list = current_entities.split('|') if current_entities else [] %}{% set ns = namespace(items=[]) %}{% for item in entities_list %}{% if item.split(':')[0] != entity_id %}{% set ns.items = ns.items + [item] %}{% endif %}{% endfor %}{{ ns.items | join('|') }}{% else %}{% endif %}"
       - if:
           - condition: template
             value_template: "{{ found_helper != '' }}"
@@ -1332,7 +323,6 @@ automation:
               entity_id: "{{ found_helper }}"
             data:
               value: "{{ filtered_entities }}"
-          
           - action: script.tech_alert
             data:
               message: "Removed threshold alert for {{ entity_id }}"
@@ -1348,28 +338,7 @@ automation:
     description: "Show all configured threshold alerts"
     sequence:
       - variables:
-          alert_list: >
-            {% set ns = namespace(alerts=[]) %}
-            {% for i in range(1, 4) %}
-              {% set helper_name = 'input_text.threshold_entities' + ('_' + i|string if i > 1 else '') %}
-              {% set entities_text = states(helper_name) %}
-              {% set entities_list = entities_text.split('|') if entities_text else [] %}
-              {% for item in entities_list %}
-                {% set parts = item.split(':') %}
-                {% if parts | length >= 4 %}
-                  {% set entity = parts[0] %}
-                  {% set threshold = parts[1] %}
-                  {% set condition = parts[2] %}
-                  {% set message = parts[3:] | join(':') %}
-                  {% set entity_name = state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title %}
-                  {% set current_value = states(entity) %}
-                  {% set alert_text = entity_name + ': ' + condition + ' ' + threshold + ' (current: ' + current_value + ')' %}
-                  {% set ns.alerts = ns.alerts + [alert_text] %}
-                {% endif %}
-              {% endfor %}
-            {% endfor %}
-            {{ ns.alerts | join('\n') if ns.alerts else 'No threshold alerts configured' }}
-      
+          alert_list: "{% set ns = namespace(alerts=[]) %}{% for i in range(1, 4) %}{% set helper_name = 'input_text.threshold_entities' + ('_' + i|string if i > 1 else '') %}{% set entities_text = states(helper_name) %}{% set entities_list = entities_text.split('|') if entities_text else [] %}{% for item in entities_list %}{% set parts = item.split(':') %}{% if parts | length >= 4 %}{% set entity = parts[0] %}{% set threshold = parts[1] %}{% set condition = parts[2] %}{% set entity_name = state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title %}{% set current_value = states(entity) %}{% set alert_text = entity_name + ': ' + condition + ' ' + threshold + ' (current: ' + current_value + ')' %}{% set ns.alerts = ns.alerts + [alert_text] %}{% endif %}{% endfor %}{% endfor %}{{ ns.alerts | join('\n') if ns.alerts else 'No threshold alerts configured' }}"
       - action: script.tech_alert
         data:
           message: |
@@ -1378,116 +347,6 @@ automation:
             {{ alert_list }}
           level: info
 
-  # Quick setup scripts for common sensor types
-  add_temperature_alert:
-    alias: "Add Temperature Alert"
-    description: "Quick setup for temperature threshold"
-    fields:
-      entity_id:
-        description: "Temperature sensor"
-        required: true
-        selector:
-          entity:
-            domain: sensor
-            device_class: temperature
-      high_threshold:
-        description: "High temperature threshold"
-        required: false
-        example: "25"
-      low_threshold:
-        description: "Low temperature threshold" 
-        required: false
-        example: "10"
-    sequence:
-      - if:
-          - condition: template
-            value_template: "{{ high_threshold is defined and high_threshold != '' }}"
-        then:
-          - action: script.add_threshold_alert
-            data:
-              entity_id: "{{ entity_id }}"
-              threshold: "{{ high_threshold }}"
-              condition: "above"
-              custom_message: "Temperature is too high"
-      
-      - if:
-          - condition: template
-            value_template: "{{ low_threshold is defined and low_threshold != '' }}"
-        then:
-          - action: script.add_threshold_alert
-            data:
-              entity_id: "{{ entity_id }}"
-              threshold: "{{ low_threshold }}"
-              condition: "below"
-              custom_message: "Temperature is too low"
-
-  add_battery_alert:
-    alias: "Add Battery Alert"
-    description: "Quick setup for battery level threshold"
-    fields:
-      entity_id:
-        description: "Battery sensor"
-        required: true
-        selector:
-          entity:
-            domain: sensor
-            device_class: battery
-      threshold:
-        description: "Low battery threshold"
-        required: true
-        default: "20"
-        example: "15"
-    sequence:
-      - action: script.add_threshold_alert
-        data:
-          entity_id: "{{ entity_id }}"
-          threshold: "{{ threshold }}"
-          condition: "below"
-          custom_message: "Battery level is low"
-
-  add_humidity_alert:
-    alias: "Add Humidity Alert"  
-    description: "Quick setup for humidity threshold"
-    fields:
-      entity_id:
-        description: "Humidity sensor"
-        required: true
-        selector:
-          entity:
-            domain: sensor
-            device_class: humidity
-      high_threshold:
-        description: "High humidity threshold"
-        required: false
-        example: "70"
-      low_threshold:
-        description: "Low humidity threshold"
-        required: false
-        example: "30"
-    sequence:
-      - if:
-          - condition: template
-            value_template: "{{ high_threshold is defined and high_threshold != '' }}"
-        then:
-          - action: script.add_threshold_alert
-            data:
-              entity_id: "{{ entity_id }}"
-              threshold: "{{ high_threshold }}"
-              condition: "above"
-              custom_message: "Humidity is too high"
-      
-      - if:
-          - condition: template
-            value_template: "{{ low_threshold is defined and low_threshold != '' }}"
-        then:
-          - action: script.add_threshold_alert
-            data:
-              entity_id: "{{ entity_id }}"
-              threshold: "{{ low_threshold }}"
-              condition: "below"
-              custom_message: "Humidity is too low"
-
-  # Bulk management and testing
   clear_all_threshold_alerts:
     alias: "Clear All Threshold Alerts"
     description: "Remove all configured threshold alerts"
@@ -1497,19 +356,16 @@ automation:
           entity_id: input_text.threshold_entities
         data:
           value: ""
-      
       - action: input_text.set_value
         target:
           entity_id: input_text.threshold_entities_2
         data:
           value: ""
-      
       - action: input_text.set_value
         target:
           entity_id: input_text.threshold_entities_3
         data:
           value: ""
-      
       - action: script.tech_alert
         data:
           message: "All threshold alerts have been cleared"
@@ -1530,7 +386,6 @@ automation:
           channel: "{{ states('input_select.threshold_alert_channel') }}"
           location: "Test System"
 
-  # Card form management scripts - IMPROVED VERSION
   create_threshold_alert_from_form:
     alias: "Create Threshold Alert from Form"
     description: "Create threshold alert using the card form inputs with improved validation"
@@ -1540,13 +395,9 @@ automation:
           threshold: "{{ states('input_text.temp_threshold_value') }}"
           condition: "{{ states('input_select.temp_threshold_condition') }}"
           message: "{{ states('input_text.temp_threshold_message') }}"
-      
-      # IMPROVED: Better validation logic
       - if:
           - condition: template
-            value_template: >
-              {{ entity_id != '' and entity_id != 'unknown' and entity_id != 'unavailable' 
-                 and entity_id.count('.') == 1 and entity_id != 'None' }}
+            value_template: "{{ entity_id != '' and entity_id != 'unknown' and entity_id != 'unavailable' and entity_id.count('.') == 1 and entity_id != 'None' }}"
         then:
           - if:
               - condition: template
@@ -1558,26 +409,21 @@ automation:
                   threshold: "{{ threshold }}"
                   condition: "{{ condition }}"
                   custom_message: "{{ message if message != '' and message != 'unknown' else '' }}"
-              
-              # Clear the form after successful creation
               - action: input_text.set_value
                 target:
                   entity_id: input_text.temp_threshold_entity
                 data:
                   value: ""
-              
               - action: input_text.set_value
                 target:
                   entity_id: input_text.temp_threshold_message
                 data:
                   value: ""
-              
               - action: input_text.set_value
                 target:
                   entity_id: input_text.temp_threshold_value
                 data:
                   value: "20"
-              
               - action: script.tech_alert
                 data:
                   message: "✅ Threshold alert created successfully for {{ state_attr(entity_id, 'friendly_name') or entity_id }}"
@@ -1590,103 +436,8 @@ automation:
         else:
           - action: script.tech_alert
             data:
-              message: >
-                ❌ Error: Please enter a valid entity ID. 
-                {% if entity_id == '' or entity_id == 'unavailable' %}
-                Entity ID field is empty or invalid.
-                {% elif entity_id.count('.') != 1 %}
-                Entity ID should have format: domain.entity_name
-                {% else %}
-                Please check the entity ID format.
-                {% endif %}
-                
-                Example: sensor.living_room_temperature
+              message: "❌ Error: Please enter a valid entity ID. {% if entity_id == '' or entity_id == 'unavailable' %}Entity ID field is empty or invalid.{% elif entity_id.count('.') != 1 %}Entity ID should have format: domain.entity_name{% else %}Please check the entity ID format.{% endif %} Example: sensor.living_room_temperature"
               level: warning
-
-  # Quick setup with entity discovery
-  quick_battery_alert_setup:
-    alias: "Quick Battery Alert Setup"
-    description: "Quick setup for battery alerts with entity suggestions"
-    sequence:
-      - variables:
-          battery_entities: >
-            {% set ns = namespace(entities=[]) %}
-            {% for entity in states.sensor %}
-              {% if entity.attributes.device_class == 'battery' %}
-                {% set ns.entities = ns.entities + [entity.entity_id] %}
-              {% endif %}
-            {% endfor %}
-            {{ ns.entities[:10] }}
-      
-      - action: script.tech_alert
-        data:
-          message: |
-            🔋 BATTERY ALERT SETUP
-            
-            Available battery sensors:
-            {% for entity in battery_entities %}
-            - {{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title }} ({{ entity }})
-            {% endfor %}
-            
-            Use the form above to add alerts for these entities.
-            Recommended threshold: 20% (below)
-          level: info
-
-  quick_temperature_alert_setup:
-    alias: "Quick Temperature Alert Setup"
-    description: "Quick setup for temperature alerts with entity suggestions"
-    sequence:
-      - variables:
-          temp_entities: >
-            {% set ns = namespace(entities=[]) %}
-            {% for entity in states.sensor %}
-              {% if entity.attributes.device_class == 'temperature' %}
-                {% set ns.entities = ns.entities + [entity.entity_id] %}
-              {% endif %}
-            {% endfor %}
-            {{ ns.entities[:10] }}
-      
-      - action: script.tech_alert
-        data:
-          message: |
-            🌡️ TEMPERATURE ALERT SETUP
-            
-            Available temperature sensors:
-            {% for entity in temp_entities %}
-            - {{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title }} ({{ entity }})
-            {% endfor %}
-            
-            Use the form above to add high/low temperature alerts.
-            Tip: Set both 'above' and 'below' thresholds for the same entity.
-          level: info
-
-  quick_humidity_alert_setup:
-    alias: "Quick Humidity Alert Setup"
-    description: "Quick setup for humidity alerts with entity suggestions"
-    sequence:
-      - variables:
-          humidity_entities: >
-            {% set ns = namespace(entities=[]) %}
-            {% for entity in states.sensor %}
-              {% if entity.attributes.device_class == 'humidity' %}
-                {% set ns.entities = ns.entities + [entity.entity_id] %}
-              {% endif %}
-            {% endfor %}
-            {{ ns.entities[:10] }}
-      
-      - action: script.tech_alert
-        data:
-          message: |
-            💧 HUMIDITY ALERT SETUP
-            
-            Available humidity sensors:
-            {% for entity in humidity_entities %}
-            - {{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title }} ({{ entity }})
-            {% endfor %}
-            
-            Use the form above to add humidity alerts.
-            Common thresholds: 30% (below) for too dry, 70% (above) for too humid.
-          level: info
 
   remove_threshold_alert_from_form:
     alias: "Remove Threshold Alert from Form"
@@ -1694,7 +445,6 @@ automation:
     sequence:
       - variables:
           entity_id: "{{ states('input_text.temp_remove_entity') }}"
-      
       - if:
           - condition: template
             value_template: "{{ entity_id != '' and entity_id != 'unknown' }}"
@@ -1702,8 +452,6 @@ automation:
           - action: script.remove_threshold_alert
             data:
               entity_id: "{{ entity_id }}"
-          
-          # Clear the form
           - action: input_text.set_value
             target:
               entity_id: input_text.temp_remove_entity
@@ -1715,77 +463,291 @@ automation:
               message: "❌ Error: Please enter a valid entity ID to remove"
               level: warning
 
-  # Entity discovery scripts (replace auto-entities functionality)
-  discover_door_sensors:
-    alias: "Discover Door Sensors"
-    description: "Find all door sensors in the system"
-    sequence:
-      - variables:
-          door_sensors: >
-            {% set ns = namespace(sensors=[]) %}
-            {% for entity in states.binary_sensor %}
-              {% if entity.attributes.device_class == 'door' %}
-                {% set ns.sensors = ns.sensors + [entity.entity_id] %}
-              {% endif %}
-            {% endfor %}
-            {{ ns.sensors }}
-      
-      - action: script.tech_alert
-        data:
-          message: |
-            🚪 DOOR SENSORS DISCOVERED
-            
-            Found {{ door_sensors | length }} door sensors:
-            {% for entity in door_sensors %}
-            - {{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title }}
-              ID: {{ entity }}
-              Current: {{ states(entity) | title }}
-            {% endfor %}
-            
-            Copy any entity ID above to use in the binary automation generator.
-          level: info
+  # ===================================
+  # BINARY SENSOR AUTOMATION GENERATOR SCRIPTS
+  # ===================================
 
-  discover_motion_sensors:
-    alias: "Discover Motion Sensors"
-    description: "Find all motion sensors in the system"
+  generate_binary_automation_yaml:
+    alias: "Generate Binary Automation YAML"
+    description: "Generate automation YAML with improved validation"
     sequence:
       - variables:
-          motion_sensors: >
-            {% set ns = namespace(sensors=[]) %}
-            {% for entity in states.binary_sensor %}
-              {% if entity.attributes.device_class == 'motion' %}
-                {% set ns.sensors = ns.sensors + [entity.entity_id] %}
-              {% endif %}
-            {% endfor %}
-            {{ ns.sensors }}
-      
-      - action: script.tech_alert
-        data:
-          message: |
-            🏃 MOTION SENSORS DISCOVERED
-            
-            Found {{ motion_sensors | length }} motion sensors:
-            {% for entity in motion_sensors %}
-            - {{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title }}
-              ID: {{ entity }}
-              Current: {{ states(entity) | title }}
-            {% endfor %}
-            
-            Copy any entity ID above to use in the binary automation generator.
-          level: info
+          entity: "{{ states('input_text.binary_automation_entity') }}"
+          message: "{{ states('input_text.binary_automation_message') }}"
+          location: "{{ states('input_text.binary_automation_location') }}"
+          trigger_state: "{{ states('input_select.binary_automation_trigger_state') }}"
+          level: "{{ states('input_select.binary_automation_level') }}"
+          channel: "{{ states('input_select.binary_automation_channel') }}"
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ entity == '' or entity == 'unknown' or entity == 'unavailable' }}"
+            sequence:
+              - action: persistent_notification.create
+                data:
+                  title: "❌ Missing Entity ID"
+                  message: "Please enter a binary sensor entity ID. Go to Developer Tools → States and filter by 'binary_sensor.' to find entity IDs."
+                  notification_id: "yaml_error"
+          - conditions:
+              - condition: template
+                value_template: "{{ message == '' or message == 'unknown' or message == 'unavailable' }}"
+            sequence:
+              - action: persistent_notification.create
+                data:
+                  title: "❌ Missing Alert Message"
+                  message: "Please enter an alert message that will be sent to Telegram when the automation triggers."
+                  notification_id: "yaml_error"
+          - conditions:
+              - condition: template
+                value_template: "{{ states(entity) in ['unknown', 'unavailable'] }}"
+            sequence:
+              - action: persistent_notification.create
+                data:
+                  title: "❌ Entity Not Found"
+                  message: "Entity '{{ entity }}' not found or unavailable. Please check spelling and ensure the device is online."
+                  notification_id: "yaml_error"
+        default:
+          - variables:
+              entity_name: "{{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title }}"
+              automation_name: "{{ entity_name }} Alert"
+              yaml_content: |
+                # Generated Binary Sensor Automation
+                alias: "{{ automation_name }}"
+                description: "Alert when {{ entity_name }} changes to {{ trigger_state }}"
+                trigger:
+                  - platform: state
+                    entity_id: {{ entity }}
+                    to: "{{ trigger_state }}"
+                condition: []
+                action:
+                  - action: script.send_alert
+                    data:
+                      message: "{{ message }}"
+                      level: "{{ level }}"
+                      channel: "{{ channel }}"{% if location %}
+                      location: "{{ location }}"{% endif %}
+                mode: single
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.generated_automation_yaml
+            data:
+              value: "{{ yaml_content }}"
+          - action: persistent_notification.create
+            data:
+              title: "✅ Automation YAML Generated"
+              message: "Generated automation for {{ entity_name }}. The YAML code is ready in the display card above. Copy it and create a new automation in Home Assistant."
+              notification_id: "yaml_generated"
 
-  discover_safety_sensors:
-    alias: "Discover Safety Sensors"
-    description: "Find all safety sensors in the system"
+  clear_binary_automation_form:
+    alias: "Clear Binary Automation Form"
+    description: "Reset all form fields"
     sequence:
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.binary_automation_entity
+        data:
+          value: ""
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.binary_automation_message
+        data:
+          value: ""
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.binary_automation_location
+        data:
+          value: ""
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.binary_automation_trigger_state
+        data:
+          option: "on"
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.binary_automation_level
+        data:
+          option: "warning"
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.binary_automation_channel
+        data:
+          option: "main"
+
+# ===================================
+# INPUT HELPERS
+# ===================================
+
+input_text:
+  threshold_entities:
+    name: "Threshold Alert Entities"
+    initial: ""
+    max: 255
+
+  threshold_entities_2:
+    name: "Threshold Alert Entities (Group 2)"
+    initial: ""
+    max: 255
+
+  threshold_entities_3:
+    name: "Threshold Alert Entities (Group 3)" 
+    initial: ""
+    max: 255
+
+  temp_threshold_entity:
+    name: "Temporary Threshold Entity"
+    initial: ""
+    max: 100
+
+  temp_threshold_value:
+    name: "Temporary Threshold Value"
+    initial: "20"
+    max: 20
+
+  temp_threshold_message:
+    name: "Temporary Threshold Message"
+    initial: ""
+    max: 200
+
+  temp_remove_entity:
+    name: "Temporary Remove Entity"
+    initial: ""
+    max: 100
+
+  binary_automation_entity:
+    name: "Binary Automation Entity"
+    initial: ""
+    max: 100
+
+  binary_automation_message:
+    name: "Binary Automation Message"
+    initial: ""
+    max: 200
+
+  binary_automation_location:
+    name: "Binary Automation Location"
+    initial: ""
+    max: 100
+
+  generated_automation_yaml:
+    name: "Generated Automation YAML"
+    initial: ""
+    max: 8192
+
+input_boolean:
+  threshold_alerts_enabled:
+    name: "Enable Threshold Alerts"
+    initial: true
+    icon: mdi:alert-circle
+
+input_select:
+  threshold_alert_channel:
+    name: "Default Alert Channel"
+    options:
+      - main
+      - technical
+      - both
+    initial: main
+    icon: mdi:message-alert
+
+  temp_threshold_condition:
+    name: "Temporary Threshold Condition"
+    options:
+      - "above"
+      - "below"
+    initial: "above"
+
+  binary_automation_level:
+    name: "Binary Automation Alert Level"
+    options:
+      - info
+      - warning
+      - critical
+    initial: warning
+    icon: mdi:alert
+
+  binary_automation_channel:
+    name: "Binary Automation Alert Channel"
+    options:
+      - main
+      - technical
+      - both
+    initial: main
+    icon: mdi:message-alert
+
+  binary_automation_trigger_state:
+    name: "Binary Automation Trigger State"
+    options:
+      - "on"
+      - "off"  
+      - "unavailable"
+    initial: "on"
+    icon: mdi:state-machine
+
+# ===================================
+# TEMPLATE SENSORS
+# ===================================
+
+template:
+  - sensor:
+      - name: "Threshold Alert Count"
+        unique_id: "pkg_threshold_alert_count"
+        state: "{% set count = 0 %}{% for i in range(1, 4) %}{% set entity_name = 'input_text.threshold_entities' + ('_' + i|string if i > 1 else '') %}{% set entities = states(entity_name) %}{% if entities %}{% set count = count + entities.split('|') | length %}{% endif %}{% endfor %}{{ count }}"
+        icon: mdi:counter
+        
+      - name: "Threshold Alert Status"
+        unique_id: "pkg_threshold_alert_status"
+        state: "{% if is_state('input_boolean.threshold_alerts_enabled', 'on') %}{% set count = states('sensor.threshold_alert_count') | int %}{% if count > 0 %}Monitoring {{ count }} entities{% else %}No entities configured{% endif %}{% else %}Disabled{% endif %}"
+        icon: mdi:shield-check
+
+      - name: "Binary Automation Form Status"
+        unique_id: "pkg_binary_automation_form_status"
+        state: "{% set entity = states('input_text.binary_automation_entity') %}{% set message = states('input_text.binary_automation_message') %}{% if entity != '' and entity != 'unknown' and message != '' and message != 'unknown' %}{% if states(entity) != 'unknown' %}Ready to generate{% else %}Invalid entity{% endif %}{% else %}Fill required fields{% endif %}"
+        icon: mdi:form-select
+
+# ===================================
+# AUTOMATIONS 
+# ===================================
+
+automation:
+  - alias: "Threshold Alert Monitor"
+    id: "threshold_alert_monitor"
+    description: "Monitor entities for threshold breaches"
+    trigger:
+      - platform: state
+        entity_id: sensor.*
+    condition:
+      - condition: state
+        entity_id: input_boolean.threshold_alerts_enabled
+        state: 'on'
+      - condition: template
+        value_template: "{% set triggered_entity = trigger.entity_id %}{% set ns = namespace(found=false) %}{% for i in range(1, 4) %}{% set helper_name = 'input_text.threshold_entities' + ('_' + i|string if i > 1 else '') %}{% set entities_text = states(helper_name) %}{% set entities_list = entities_text.split('|') if entities_text else [] %}{% for item in entities_list %}{% set parts = item.split(':') %}{% if parts | length >= 4 and parts[0] == triggered_entity %}{% set ns.found = true %}{% endif %}{% endfor %}{% endfor %}{{ ns.found }}"
+    action:
       - variables:
-          safety_sensors: >
-            {% set ns = namespace(sensors=[]) %}
-            {% for entity in states.binary_sensor %}
-              {% if entity.attributes.device_class in ['smoke', 'gas', 'safety', 'problem'] %}
-                {% set ns.sensors = ns.sensors + [entity.entity_id] %}
-              {% endif %}
-            {% endfor %}
-            {{ ns.sensors }}
-      
-      - action: script
+          all_entities: "{% set ns = namespace(entities=[]) %}{% for i in range(1, 4) %}{% set helper_name = 'input_text.threshold_entities' + ('_' + i|string if i > 1 else '') %}{% set entities_text = states(helper_name) %}{% set entities_list = entities_text.split('|') if entities_text else [] %}{% set ns.entities = ns.entities + entities_list %}{% endfor %}{{ ns.entities }}"
+          triggered_entity: "{{ trigger.entity_id }}"
+          new_state: "{{ trigger.to_state.state }}"
+          old_state: "{{ trigger.from_state.state if trigger.from_state else 'unknown' }}"
+      - repeat:
+          for_each: "{{ all_entities }}"
+          sequence:
+            - variables:
+                parts: "{{ repeat.item.split(':') }}"
+                monitor_entity: "{{ parts[0] if parts | length >= 4 else '' }}"
+                threshold_value: "{{ parts[1] | float if parts | length >= 4 else 0 }}"
+                condition_type: "{{ parts[2] if parts | length >= 4 else 'above' }}"
+                alert_message: "{{ parts[3:] | join(':') if parts | length >= 4 else 'Threshold alert' }}"
+            - condition: template
+              value_template: "{{ monitor_entity == triggered_entity }}"
+            - condition: template
+              value_template: "{% set current_val = new_state | float(0) %}{% set old_val = old_state | float(0) %}{% set threshold = threshold_value %}{% if condition_type == 'above' %}{{ current_val > threshold and old_val <= threshold }}{% else %}{{ current_val < threshold and old_val >= threshold }}{% endif %}"
+            - variables:
+                entity_name: "{{ state_attr(monitor_entity, 'friendly_name') or monitor_entity.split('.')[1] | replace('_', ' ') | title }}"
+                current_value: "{{ new_state }}"
+                unit: "{{ state_attr(monitor_entity, 'unit_of_measurement') or '' }}"
+                alert_channel: "{{ states('input_select.threshold_alert_channel') }}"
+            - action: script.send_alert
+              data:
+                message: "🚨 {{ alert_message }} - Current value: {{ current_value }} {{ unit }} - Threshold: {{ condition_type }} {{ threshold_value }} {{ unit }}"
+                level: warning
+                channel: "{{ alert_channel }}"
+                location: "{{ entity_name }}"
