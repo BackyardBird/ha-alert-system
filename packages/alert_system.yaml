@@ -1,8 +1,8 @@
 # packages/alert_system.yaml
-# Version: 3.0.1 - MAJOR REWRITE
+# Version: 3.0.2 - MAJOR REWRITE + BUG FIXES
 # Significant simplification and cleanup
-# Removed quick setup and discovery scripts for simplicity
-# Fixed all YAML syntax issues
+# Fixed complex Jinja templating issues that prevented alert creation
+# Simplified scripts for better reliability
 
 script:
   # ===================================
@@ -283,22 +283,48 @@ script:
           default_message: "{% if condition == 'above' %}{{ entity_name }} is above threshold{% else %}{{ entity_name }} is below threshold{% endif %}"
           alert_message: "{{ custom_message if custom_message else default_message }}"
           new_entry: "{{ entity_id }}:{{ threshold }}:{{ condition }}:{{ alert_message }}"
-          target_helper: "{% for i in range(1, 4) %}{% set helper_name = 'input_text.threshold_entities' + ('_' + i|string if i > 1 else '') %}{% set current_content = states(helper_name) %}{% set new_content = current_content + ('|' if current_content else '') + new_entry %}{% if new_content | length <= 250 %}{{ helper_name }}{%- break -%}{% endif %}{% endfor %}"
-          updated_entities: "{% set helper = target_helper %}{% set current_content = states(helper) %}{% if current_content %}{{ current_content }}|{{ new_entry }}{% else %}{{ new_entry }}{% endif %}"
-      - if:
-          - condition: template
-            value_template: "{{ target_helper != '' }}"
-        then:
-          - action: input_text.set_value
-            target:
-              entity_id: "{{ target_helper }}"
-            data:
-              value: "{{ updated_entities }}"
-          - action: script.tech_alert
-            data:
-              message: "Added threshold alert for {{ entity_name }}: {{ condition }} {{ threshold }}"
-              level: info
-        else:
+      # Try to add to first available helper
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ (states('input_text.threshold_entities') | length + new_entry | length + 1) <= 250 }}"
+            sequence:
+              - action: input_text.set_value
+                target:
+                  entity_id: input_text.threshold_entities
+                data:
+                  value: "{% if states('input_text.threshold_entities') %}{{ states('input_text.threshold_entities') }}|{{ new_entry }}{% else %}{{ new_entry }}{% endif %}"
+              - action: script.tech_alert
+                data:
+                  message: "Added threshold alert for {{ entity_name }}: {{ condition }} {{ threshold }}"
+                  level: info
+          - conditions:
+              - condition: template
+                value_template: "{{ (states('input_text.threshold_entities_2') | length + new_entry | length + 1) <= 250 }}"
+            sequence:
+              - action: input_text.set_value
+                target:
+                  entity_id: input_text.threshold_entities_2
+                data:
+                  value: "{% if states('input_text.threshold_entities_2') %}{{ states('input_text.threshold_entities_2') }}|{{ new_entry }}{% else %}{{ new_entry }}{% endif %}"
+              - action: script.tech_alert
+                data:
+                  message: "Added threshold alert for {{ entity_name }}: {{ condition }} {{ threshold }}"
+                  level: info
+          - conditions:
+              - condition: template
+                value_template: "{{ (states('input_text.threshold_entities_3') | length + new_entry | length + 1) <= 250 }}"
+            sequence:
+              - action: input_text.set_value
+                target:
+                  entity_id: input_text.threshold_entities_3
+                data:
+                  value: "{% if states('input_text.threshold_entities_3') %}{{ states('input_text.threshold_entities_3') }}|{{ new_entry }}{% else %}{{ new_entry }}{% endif %}"
+              - action: script.tech_alert
+                data:
+                  message: "Added threshold alert for {{ entity_name }}: {{ condition }} {{ threshold }}"
+                  level: info
+        default:
           - action: script.tech_alert
             data:
               message: "Error: All threshold storage helpers are full. Please remove some entities first."
@@ -312,40 +338,66 @@ script:
         description: "Entity to remove"
         required: true
     sequence:
-      - variables:
-          found_helper: "{% set ns = namespace(helper='') %}{% for i in range(1, 4) %}{% set helper_name = 'input_text.threshold_entities' + ('_' + i|string if i > 1 else '') %}{% set current_entities = states(helper_name) %}{% set entities_list = current_entities.split('|') if current_entities else [] %}{% for item in entities_list %}{% if item.split(':')[0] == entity_id and ns.helper == '' %}{% set ns.helper = helper_name %}{% endif %}{% endfor %}{% endfor %}{{ ns.helper }}"
-          filtered_entities: "{% if found_helper %}{% set current_entities = states(found_helper) %}{% set entities_list = current_entities.split('|') if current_entities else [] %}{% set ns = namespace(items=[]) %}{% for item in entities_list %}{% if item.split(':')[0] != entity_id %}{% set ns.items = ns.items + [item] %}{% endif %}{% endfor %}{{ ns.items | join('|') }}{% else %}{% endif %}"
+      # Simple approach: check and remove from each helper, then verify if it's gone
       - if:
           - condition: template
-            value_template: "{{ found_helper != '' }}"
+            value_template: "{{ entity_id + ':' in states('input_text.threshold_entities') }}"
         then:
+          - variables:
+              entries: "{{ states('input_text.threshold_entities').split('|') }}"
+              filtered_entries: "{{ entries | reject('match', '^' + entity_id + ':.*') | list }}"
+              new_content: "{{ filtered_entries | join('|') }}"
           - action: input_text.set_value
             target:
-              entity_id: "{{ found_helper }}"
+              entity_id: input_text.threshold_entities
             data:
-              value: "{{ filtered_entities }}"
-          - action: script.tech_alert
+              value: "{{ new_content }}"
+      - if:
+          - condition: template
+            value_template: "{{ entity_id + ':' in states('input_text.threshold_entities_2') }}"
+        then:
+          - variables:
+              entries: "{{ states('input_text.threshold_entities_2').split('|') }}"
+              filtered_entries: "{{ entries | reject('match', '^' + entity_id + ':.*') | list }}"
+              new_content: "{{ filtered_entries | join('|') }}"
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.threshold_entities_2
             data:
-              message: "Removed threshold alert for {{ entity_id }}"
-              level: info
-        else:
-          - action: script.tech_alert
+              value: "{{ new_content }}"
+      - if:
+          - condition: template
+            value_template: "{{ entity_id + ':' in states('input_text.threshold_entities_3') }}"
+        then:
+          - variables:
+              entries: "{{ states('input_text.threshold_entities_3').split('|') }}"
+              filtered_entries: "{{ entries | reject('match', '^' + entity_id + ':.*') | list }}"
+              new_content: "{{ filtered_entries | join('|') }}"
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.threshold_entities_3
             data:
-              message: "Entity {{ entity_id }} not found in threshold alerts"
-              level: warning
+              value: "{{ new_content }}"
+      # Always send a confirmation message
+      - action: script.tech_alert
+        data:
+          message: "Remove operation completed for {{ entity_id }}. Use 'List All' to verify."
+          level: info
 
   list_threshold_alerts:
     alias: "List Threshold Alerts"
     description: "Show all configured threshold alerts"
     sequence:
-      - variables:
-          alert_list: "{% set ns = namespace(alerts=[]) %}{% for i in range(1, 4) %}{% set helper_name = 'input_text.threshold_entities' + ('_' + i|string if i > 1 else '') %}{% set entities_text = states(helper_name) %}{% set entities_list = entities_text.split('|') if entities_text else [] %}{% for item in entities_list %}{% set parts = item.split(':') %}{% if parts | length >= 4 %}{% set entity = parts[0] %}{% set threshold = parts[1] %}{% set condition = parts[2] %}{% set entity_name = state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title %}{% set current_value = states(entity) %}{% set alert_text = entity_name + ': ' + condition + ' ' + threshold + ' (current: ' + current_value + ')' %}{% set ns.alerts = ns.alerts + [alert_text] %}{% endif %}{% endfor %}{% endfor %}{{ ns.alerts | join('\n') if ns.alerts else 'No threshold alerts configured' }}"
       - action: script.tech_alert
         data:
           message: |
             📊 THRESHOLD ALERTS STATUS
             
-            {{ alert_list }}
+            Helper 1: {{ states('input_text.threshold_entities') or 'Empty' }}
+            Helper 2: {{ states('input_text.threshold_entities_2') or 'Empty' }}
+            Helper 3: {{ states('input_text.threshold_entities_3') or 'Empty' }}
+            
+            Format: entity_id:threshold:condition:message
           level: info
 
   clear_all_threshold_alerts:
@@ -396,49 +448,56 @@ script:
           threshold: "{{ states('input_text.temp_threshold_value') }}"
           condition: "{{ states('input_select.temp_threshold_condition') }}"
           message: "{{ states('input_text.temp_threshold_message') }}"
-      - if:
-          - condition: template
-            value_template: "{{ entity_id != '' and entity_id != 'unknown' and entity_id != 'unavailable' and entity_id.count('.') == 1 and entity_id != 'None' }}"
-        then:
-          - if:
+      # Simple validation
+      - choose:
+          - conditions:
               - condition: template
-                value_template: "{{ states(entity_id) not in ['unknown', 'unavailable'] }}"
-            then:
-              - action: script.add_threshold_alert
-                data:
-                  entity_id: "{{ entity_id }}"
-                  threshold: "{{ threshold }}"
-                  condition: "{{ condition }}"
-                  custom_message: "{{ message if message != '' and message != 'unknown' else '' }}"
-              - action: input_text.set_value
-                target:
-                  entity_id: input_text.temp_threshold_entity
-                data:
-                  value: ""
-              - action: input_text.set_value
-                target:
-                  entity_id: input_text.temp_threshold_message
-                data:
-                  value: ""
-              - action: input_text.set_value
-                target:
-                  entity_id: input_text.temp_threshold_value
-                data:
-                  value: "20"
+                value_template: "{{ entity_id == '' or entity_id == 'unavailable' or entity_id == 'unknown' }}"
+            sequence:
               - action: script.tech_alert
                 data:
-                  message: "✅ Threshold alert created successfully for {{ state_attr(entity_id, 'friendly_name') or entity_id }}"
-                  level: info
-            else:
-              - action: script.tech_alert
-                data:
-                  message: "❌ Error: Entity '{{ entity_id }}' exists but is currently unavailable or unknown. Please check the entity state."
+                  message: "❌ Error: Please enter an entity ID"
                   level: warning
-        else:
-          - action: script.tech_alert
+          - conditions:
+              - condition: template
+                value_template: "{{ '.' not in entity_id }}"
+            sequence:
+              - action: script.tech_alert
+                data:
+                  message: "❌ Error: Entity ID must contain a dot (like sensor.temperature)"
+                  level: warning
+          - conditions:
+              - condition: template
+                value_template: "{{ states(entity_id) in ['unknown', 'unavailable'] }}"
+            sequence:
+              - action: script.tech_alert
+                data:
+                  message: "❌ Error: Entity '{{ entity_id }}' not found. Please check the entity ID."
+                  level: warning
+        default:
+          # Entity is valid, proceed with creation
+          - action: script.add_threshold_alert
             data:
-              message: "❌ Error: Please enter a valid entity ID. {% if entity_id == '' or entity_id == 'unavailable' %}Entity ID field is empty or invalid.{% elif entity_id.count('.') != 1 %}Entity ID should have format: domain.entity_name{% else %}Please check the entity ID format.{% endif %} Example: sensor.living_room_temperature"
-              level: warning
+              entity_id: "{{ entity_id }}"
+              threshold: "{{ threshold }}"
+              condition: "{{ condition }}"
+              custom_message: "{{ message if message != '' else '' }}"
+          # Clear the form after successful creation
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.temp_threshold_entity
+            data:
+              value: ""
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.temp_threshold_message
+            data:
+              value: ""
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.temp_threshold_value
+            data:
+              value: "20"
 
   remove_threshold_alert_from_form:
     alias: "Remove Threshold Alert from Form"
@@ -448,7 +507,7 @@ script:
           entity_id: "{{ states('input_text.temp_remove_entity') }}"
       - if:
           - condition: template
-            value_template: "{{ entity_id != '' and entity_id != 'unknown' }}"
+            value_template: "{{ entity_id != '' and entity_id != 'unknown' and entity_id != 'unavailable' }}"
         then:
           - action: script.remove_threshold_alert
             data:
@@ -511,42 +570,22 @@ script:
           - variables:
               entity_name: "{{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title }}"
               automation_name: "{{ entity_name }} Alert"
-              yaml_content: |
-                # Generated Binary Sensor Automation
-                alias: "{{ automation_name }}"
-                description: "Alert when {{ entity_name }} changes to {{ trigger_state }}"
-                trigger:
-                  - platform: state
-                    entity_id: {{ entity }}
-                    to: "{{ trigger_state }}"
-                condition: []
-                action:
-                  - action: script.send_alert
-                    data:
-                      message: "{{ message }}"
-                      level: "{{ level }}"
-                      channel: "{{ channel }}"{% if location %}
-                      location: "{{ location }}"{% endif %}
-                mode: single
-              # Split YAML across multiple helpers if needed
-              yaml_part1: "{{ yaml_content[:250] }}"
-              yaml_part2: "{{ yaml_content[250:500] if yaml_content | length > 250 else '' }}"
-              yaml_part3: "{{ yaml_content[500:750] if yaml_content | length > 500 else '' }}"
+          # Generate YAML in parts to avoid 255 char limit issues
           - action: input_text.set_value
             target:
               entity_id: input_text.generated_automation_yaml
             data:
-              value: "{{ yaml_part1 }}"
+              value: "alias: \"{{ automation_name }}\"\ndescription: \"Alert when {{ entity_name }} changes to {{ trigger_state }}\"\ntrigger:\n  - platform: state\n    entity_id: {{ entity }}"
           - action: input_text.set_value
             target:
               entity_id: input_text.generated_automation_yaml_2
             data:
-              value: "{{ yaml_part2 }}"
+              value: "    to: \"{{ trigger_state }}\"\ncondition: []\naction:\n  - action: script.send_alert\n    data:\n      message: \"{{ message }}\""
           - action: input_text.set_value
             target:
               entity_id: input_text.generated_automation_yaml_3
             data:
-              value: "{{ yaml_part3 }}"
+              value: "      level: \"{{ level }}\"\n      channel: \"{{ channel }}\"{% if location %}\n      location: \"{{ location }}\"{% endif %}\nmode: single"
           - action: persistent_notification.create
             data:
               title: "✅ Automation YAML Generated"
@@ -731,7 +770,7 @@ template:
   - sensor:
       - name: "Threshold Alert Count"
         unique_id: "pkg_threshold_alert_count"
-        state: "{% set count = 0 %}{% for i in range(1, 4) %}{% set entity_name = 'input_text.threshold_entities' + ('_' + i|string if i > 1 else '') %}{% set entities = states(entity_name) %}{% if entities %}{% set count = count + entities.split('|') | length %}{% endif %}{% endfor %}{{ count }}"
+        state: "{% set h1 = states('input_text.threshold_entities') %}{% set h2 = states('input_text.threshold_entities_2') %}{% set h3 = states('input_text.threshold_entities_3') %}{{ (h1.split('|') | length if h1 != '' else 0) + (h2.split('|') | length if h2 != '' else 0) + (h3.split('|') | length if h3 != '' else 0) }}"
         icon: mdi:counter
         
       - name: "Threshold Alert Status"
@@ -741,7 +780,7 @@ template:
 
       - name: "Binary Automation Form Status"
         unique_id: "pkg_binary_automation_form_status"
-        state: "{% set entity = states('input_text.binary_automation_entity') %}{% set message = states('input_text.binary_automation_message') %}{% if entity != '' and entity != 'unknown' and message != '' and message != 'unknown' %}{% if states(entity) != 'unknown' %}Ready to generate{% else %}Invalid entity{% endif %}{% else %}Fill required fields{% endif %}"
+        state: "{% set entity = states('input_text.binary_automation_entity') %}{% set message = states('input_text.binary_automation_message') %}{% if entity != '' and entity != 'unknown' and message != '' and message != 'unknown' %}{% if states(entity) not in ['unknown', 'unavailable'] %}Ready to generate{% else %}Invalid entity{% endif %}{% else %}Fill required fields{% endif %}"
         icon: mdi:form-select
 
 # ===================================
@@ -759,35 +798,45 @@ automation:
       - condition: state
         entity_id: input_boolean.threshold_alerts_enabled
         state: 'on'
-      - condition: template
-        value_template: "{% set triggered_entity = trigger.entity_id %}{% set ns = namespace(found=false) %}{% for i in range(1, 4) %}{% set helper_name = 'input_text.threshold_entities' + ('_' + i|string if i > 1 else '') %}{% set entities_text = states(helper_name) %}{% set entities_list = entities_text.split('|') if entities_text else [] %}{% for item in entities_list %}{% set parts = item.split(':') %}{% if parts | length >= 4 and parts[0] == triggered_entity %}{% set ns.found = true %}{% endif %}{% endfor %}{% endfor %}{{ ns.found }}"
+      # Simple check if this entity is in any of the helpers
+      - condition: or
+        conditions:
+          - condition: template
+            value_template: "{{ trigger.entity_id + ':' in states('input_text.threshold_entities') }}"
+          - condition: template
+            value_template: "{{ trigger.entity_id + ':' in states('input_text.threshold_entities_2') }}"
+          - condition: template
+            value_template: "{{ trigger.entity_id + ':' in states('input_text.threshold_entities_3') }}"
     action:
       - variables:
-          all_entities: "{% set ns = namespace(entities=[]) %}{% for i in range(1, 4) %}{% set helper_name = 'input_text.threshold_entities' + ('_' + i|string if i > 1 else '') %}{% set entities_text = states(helper_name) %}{% set entities_list = entities_text.split('|') if entities_text else [] %}{% set ns.entities = ns.entities + entities_list %}{% endfor %}{{ ns.entities }}"
           triggered_entity: "{{ trigger.entity_id }}"
           new_state: "{{ trigger.to_state.state }}"
           old_state: "{{ trigger.from_state.state if trigger.from_state else 'unknown' }}"
+          # Combine all helpers content
+          all_content: "{{ states('input_text.threshold_entities') }}|{{ states('input_text.threshold_entities_2') }}|{{ states('input_text.threshold_entities_3') }}"
+      # Process all entries to find matching entity
       - repeat:
-          for_each: "{{ all_entities }}"
+          for_each: "{{ all_content.split('|') }}"
           sequence:
-            - variables:
-                parts: "{{ repeat.item.split(':') }}"
-                monitor_entity: "{{ parts[0] if parts | length >= 4 else '' }}"
-                threshold_value: "{{ parts[1] | float if parts | length >= 4 else 0 }}"
-                condition_type: "{{ parts[2] if parts | length >= 4 else 'above' }}"
-                alert_message: "{{ parts[3:] | join(':') if parts | length >= 4 else 'Threshold alert' }}"
-            - condition: template
-              value_template: "{{ monitor_entity == triggered_entity }}"
-            - condition: template
-              value_template: "{% set current_val = new_state | float(0) %}{% set old_val = old_state | float(0) %}{% set threshold = threshold_value %}{% if condition_type == 'above' %}{{ current_val > threshold and old_val <= threshold }}{% else %}{{ current_val < threshold and old_val >= threshold }}{% endif %}"
-            - variables:
-                entity_name: "{{ state_attr(monitor_entity, 'friendly_name') or monitor_entity.split('.')[1] | replace('_', ' ') | title }}"
-                current_value: "{{ new_state }}"
-                unit: "{{ state_attr(monitor_entity, 'unit_of_measurement') or '' }}"
-                alert_channel: "{{ states('input_select.threshold_alert_channel') }}"
-            - action: script.send_alert
-              data:
-                message: "🚨 {{ alert_message }} - Current value: {{ current_value }} {{ unit }} - Threshold: {{ condition_type }} {{ threshold_value }} {{ unit }}"
-                level: warning
-                channel: "{{ alert_channel }}"
-                location: "{{ entity_name }}"
+            - if:
+                - condition: template
+                  value_template: "{{ repeat.item != '' and repeat.item.startswith(triggered_entity + ':') }}"
+              then:
+                - variables:
+                    parts: "{{ repeat.item.split(':') }}"
+                    threshold_value: "{{ parts[1] | float }}"
+                    condition_type: "{{ parts[2] }}"
+                    alert_message: "{{ parts[3] if parts | length > 3 else 'Threshold alert' }}"
+                    current_val: "{{ new_state | float(0) }}"
+                    old_val: "{{ old_state | float(0) }}"
+                    threshold_crossed: "{% if condition_type == 'above' %}{{ current_val > threshold_value and old_val <= threshold_value }}{% else %}{{ current_val < threshold_value and old_val >= threshold_value }}{% endif %}"
+                - if:
+                    - condition: template
+                      value_template: "{{ threshold_crossed }}"
+                  then:
+                    - action: script.send_alert
+                      data:
+                        message: "🚨 {{ alert_message }} - Current: {{ new_state }}{{ state_attr(triggered_entity, 'unit_of_measurement') or '' }} - Threshold: {{ condition_type }} {{ threshold_value }}{{ state_attr(triggered_entity, 'unit_of_measurement') or '' }}"
+                        level: warning
+                        channel: "{{ states('input_select.threshold_alert_channel') }}"
+                        location: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
