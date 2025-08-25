@@ -1,5 +1,5 @@
 # packages/alert_system.yaml
-# Version: 3.0.2 - MAJOR REWRITE + BUG FIXES
+# Version: 3.0.1 - MAJOR REWRITE + BUG FIXES
 # Significant simplification and cleanup
 # Fixed complex Jinja templating issues that prevented alert creation
 # Simplified scripts for better reliability
@@ -189,6 +189,25 @@ script:
           chat_id: "{{ chat_id | default('') }}"
           location: ""
           include_timestamp: true
+
+  bulk_alert:
+    alias: "Bulk Alert"
+    description: "Send multiple alerts at once"
+    fields:
+      alerts:
+        description: "List of alerts to send"
+        required: true
+    sequence:
+      - repeat:
+          for_each: "{{ alerts }}"
+          sequence:
+            - action: script.send_alert
+              data:
+                message: "{{ repeat.item.message }}"
+                level: "{{ repeat.item.level | default('info') }}"
+                location: "{{ repeat.item.location | default('') }}"
+                channel: "{{ repeat.item.channel | default('main') }}"
+                chat_id: "{{ repeat.item.chat_id | default('') }}"
 
   tech_alert:
     alias: "Technical Alert"
@@ -570,22 +589,22 @@ script:
           - variables:
               entity_name: "{{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title }}"
               automation_name: "{{ entity_name }} Alert"
-          # Generate YAML in parts to avoid 255 char limit issues
+          # Generate complete YAML in parts to avoid truncation
           - action: input_text.set_value
             target:
               entity_id: input_text.generated_automation_yaml
             data:
-              value: "alias: \"{{ automation_name }}\"\ndescription: \"Alert when {{ entity_name }} changes to {{ trigger_state }}\"\ntrigger:\n  - platform: state\n    entity_id: {{ entity }}"
+              value: "alias: \"{{ automation_name }}\"\ndescription: \"Alert when {{ entity_name }} changes to {{ trigger_state }}\"\ntrigger:\n  - platform: state\n    entity_id: {{ entity }}\n    to: \"{{ trigger_state }}\""
           - action: input_text.set_value
             target:
               entity_id: input_text.generated_automation_yaml_2
             data:
-              value: "    to: \"{{ trigger_state }}\"\ncondition: []\naction:\n  - action: script.send_alert\n    data:\n      message: \"{{ message }}\""
+              value: "condition: []\naction:\n  - action: script.send_alert\n    data:\n      message: \"{{ message }}\"\n      level: \"{{ level }}\"\n      channel: \"{{ channel }}\""
           - action: input_text.set_value
             target:
               entity_id: input_text.generated_automation_yaml_3
             data:
-              value: "      level: \"{{ level }}\"\n      channel: \"{{ channel }}\"{% if location %}\n      location: \"{{ location }}\"{% endif %}\nmode: single"
+              value: "{% if location %}      location: \"{{ location }}\"{% endif %}\nmode: single"
           - action: persistent_notification.create
             data:
               title: "✅ Automation YAML Generated"
