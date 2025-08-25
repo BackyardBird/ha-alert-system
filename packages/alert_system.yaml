@@ -1,5 +1,5 @@
 # packages/alert_system.yaml
-# Version: 3.0.1 - MAJOR REWRITE + BUG FIXES
+# Version: 3.0.3 - MAJOR REWRITE + BUG FIXES
 # Significant simplification and cleanup
 # Fixed complex Jinja templating issues that prevented alert creation
 # Simplified scripts for better reliability
