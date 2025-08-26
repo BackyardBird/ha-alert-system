@@ -546,7 +546,7 @@ script:
   # BINARY SENSOR AUTOMATION GENERATOR SCRIPTS
   # ===================================
 
-generate_binary_automation_yaml:
+  generate_binary_automation_yaml:
     alias: "Generate Binary Automation YAML"
     description: "Generate automation YAML with improved validation and proper formatting"
     sequence:
