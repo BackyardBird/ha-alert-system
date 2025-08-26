@@ -546,9 +546,9 @@ script:
   # BINARY SENSOR AUTOMATION GENERATOR SCRIPTS
   # ===================================
 
-  generate_binary_automation_yaml:
+generate_binary_automation_yaml:
     alias: "Generate Binary Automation YAML"
-    description: "Generate automation YAML with improved validation"
+    description: "Generate automation YAML with improved validation and proper formatting"
     sequence:
       - variables:
           entity: "{{ states('input_text.binary_automation_entity') }}"
@@ -589,7 +589,7 @@ script:
           - variables:
               entity_name: "{{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title }}"
               automation_name: "{{ entity_name }} Alert"
-          # Generate more compact YAML to avoid truncation
+          # Generate properly formatted YAML with correct line breaks
           - action: input_text.set_value
             target:
               entity_id: input_text.generated_automation_yaml
