@@ -1,8 +1,8 @@
 # packages/alert_system.yaml
-# Version: 3.0.3 - MAJOR REWRITE + BUG FIXES
-# Significant simplification and cleanup
-# Fixed complex Jinja templating issues that prevented alert creation
-# Simplified scripts for better reliability
+# Version: 3.0.4 - BUG FIXES
+# Fixed missing bulk_alert script
+# Fixed YAML generator truncation issue
+# Restored complete automation YAML generation
 
 script:
   # ===================================
@@ -589,22 +589,22 @@ script:
           - variables:
               entity_name: "{{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title }}"
               automation_name: "{{ entity_name }} Alert"
-          # Generate complete YAML in parts to avoid truncation
+          # Generate more compact YAML to avoid truncation
           - action: input_text.set_value
             target:
               entity_id: input_text.generated_automation_yaml
             data:
-              value: "alias: \"{{ automation_name }}\"\ndescription: \"Alert when {{ entity_name }} changes to {{ trigger_state }}\"\ntrigger:\n  - platform: state\n    entity_id: {{ entity }}\n    to: \"{{ trigger_state }}\""
+              value: "alias: \"{{ automation_name }}\"\ndescription: \"Alert when {{ entity_name }} → {{ trigger_state }}\"\ntrigger:\n- platform: state\n  entity_id: {{ entity }}\n  to: \"{{ trigger_state }}\"\n"
           - action: input_text.set_value
             target:
               entity_id: input_text.generated_automation_yaml_2
             data:
-              value: "condition: []\naction:\n  - action: script.send_alert\n    data:\n      message: \"{{ message }}\"\n      level: \"{{ level }}\"\n      channel: \"{{ channel }}\""
+              value: "condition: []\naction:\n- action: script.send_alert\n  data:\n    message: \"{{ message }}\"\n    level: \"{{ level }}\"\n    channel: \"{{ channel }}\"\n"
           - action: input_text.set_value
             target:
               entity_id: input_text.generated_automation_yaml_3
             data:
-              value: "{% if location %}      location: \"{{ location }}\"{% endif %}\nmode: single"
+              value: "{% if location %}    location: \"{{ location }}\"\n{% endif %}mode: single"
           - action: persistent_notification.create
             data:
               title: "✅ Automation YAML Generated"
