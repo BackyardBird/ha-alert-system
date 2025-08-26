@@ -1,5 +1,5 @@
 # packages/alert_system.yaml
-# Version: 3.0.6 - BUG FIXES
+# Version: 3.0.7 - BUG FIXES
 # Fixed missing bulk_alert script
 # Fixed YAML generator truncation issue
 # Restored complete automation YAML generation
@@ -548,13 +548,14 @@ script:
 
   generate_binary_automation_yaml:
     alias: "Generate Binary Automation YAML"
-    description: "Generate automation YAML with improved validation and proper formatting"
+    description: "Generate automation YAML with explicit indentation handling"
     sequence:
       - variables:
           entity: "{{ states('input_text.binary_automation_entity') }}"
           message: "{{ states('input_text.binary_automation_message') }}"
           location: "{{ states('input_text.binary_automation_location') }}"
-          trigger_state: "{{ states('input_select.binary_automation_trigger_state') }}"
+          trigger_state_raw: "{{ states('input_select.binary_automation_trigger_state') }}"
+          trigger_state: "{% if trigger_state_raw == 'Device Offline' %}unavailable{% else %}{{ trigger_state_raw }}{% endif %}"
           level: "{{ states('input_select.binary_automation_level') }}"
           channel: "{{ states('input_select.binary_automation_channel') }}"
       - choose:
@@ -565,7 +566,7 @@ script:
               - action: persistent_notification.create
                 data:
                   title: "❌ Missing Entity ID"
-                  message: "Please enter a binary sensor entity ID. Go to Developer Tools → States and filter by 'binary_sensor.' to find entity IDs."
+                  message: "Please enter a binary sensor entity ID."
                   notification_id: "yaml_error"
           - conditions:
               - condition: template
@@ -574,7 +575,7 @@ script:
               - action: persistent_notification.create
                 data:
                   title: "❌ Missing Alert Message"
-                  message: "Please enter an alert message that will be sent to Telegram when the automation triggers."
+                  message: "Please enter an alert message."
                   notification_id: "yaml_error"
           - conditions:
               - condition: template
@@ -583,32 +584,34 @@ script:
               - action: persistent_notification.create
                 data:
                   title: "❌ Entity Not Found"
-                  message: "Entity '{{ entity }}' not found or unavailable. Please check spelling and ensure the device is online."
+                  message: "Entity '{{ entity }}' not found or unavailable."
                   notification_id: "yaml_error"
         default:
           - variables:
               entity_name: "{{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title }}"
               automation_name: "{{ entity_name }} Alert"
-          # Generate properly formatted YAML with correct line breaks
+              # Build the location part separately to ensure proper indentation
+              location_part: "{% if location %}    location: \"{{ location }}\"\n{% endif %}"
           - action: input_text.set_value
             target:
               entity_id: input_text.generated_automation_yaml
             data:
-              value: "alias: \"{{ automation_name }}\"\ndescription: \"Alert when {{ entity_name }} → {{ trigger_state }}\"\ntrigger:\n- platform: state\n  entity_id: {{ entity }}\n  to: \"{{ trigger_state }}\"\n"
+              value: "alias: \"{{ automation_name }}\"\ndescription: \"Alert when {{ entity_name }} → {{ trigger_state }}\"\ntrigger:\n- platform: state\n  entity_id: {{ entity }}\n  to: \"{{ trigger_state }}\"\ncondition: []\naction:\n- action: script.send_alert\n  data:"
           - action: input_text.set_value
             target:
               entity_id: input_text.generated_automation_yaml_2
             data:
-              value: "condition: []\naction:\n- action: script.send_alert\n  data:\n    message: \"{{ message }}\"\n    level: \"{{ level }}\"\n    channel: \"{{ channel }}\"\n"
+              # Explicitly build each line with proper spacing
+              value: "    message: \"{{ message }}\"\n    level: \"{{ level }}\"\n    channel: \"{{ channel }}\"\n{{ location_part }}"
           - action: input_text.set_value
             target:
               entity_id: input_text.generated_automation_yaml_3
             data:
-              value: "{% if location %}    location: \"{{ location }}\"\n{% endif %}mode: single"
+              value: "mode: single"
           - action: persistent_notification.create
             data:
               title: "✅ Automation YAML Generated"
-              message: "Generated automation for {{ entity_name }}. The YAML code is ready in the display card above. Copy it and create a new automation in Home Assistant."
+              message: "Generated automation for {{ entity_name }}."
               notification_id: "yaml_generated"
 
   clear_binary_automation_form:
@@ -777,7 +780,7 @@ input_select:
     options:
       - "on"
       - "off"  
-      - "unavailable"
+      - "Device Offline"  # This represents "unavailable" without breaking the select
     initial: "on"
     icon: mdi:state-machine
 
