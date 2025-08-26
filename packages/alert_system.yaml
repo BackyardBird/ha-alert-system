@@ -1,5 +1,5 @@
 # packages/alert_system.yaml
-# Version: 3.0.5 - BUG FIXES
+# Version: 3.0.6 - BUG FIXES
 # Fixed missing bulk_alert script
 # Fixed YAML generator truncation issue
 # Restored complete automation YAML generation
