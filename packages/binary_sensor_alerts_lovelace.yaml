@@ -1,0 +1,136 @@
+type: vertical-stack
+cards:
+  - type: markdown
+    content: >
+      # 🔘 Binary Sensor Automation Generator
+
+      Create Home Assistant automations for binary sensors with your alert
+      system.
+  - type: entities
+    title: ⚙️ Automation Builder
+    show_header_toggle: false
+    entities:
+      - entity: input_text.binary_automation_entity
+        name: 🎯 Binary Sensor
+        icon: mdi:target
+      - entity: input_select.binary_automation_trigger_state
+        name: 🔀 Trigger State
+        icon: mdi:state-machine
+      - entity: input_text.binary_automation_message
+        name: 💬 Alert Message
+        icon: mdi:message-text
+      - entity: input_select.binary_automation_level
+        name: ⚠️ Alert Level
+        icon: mdi:alert
+      - entity: input_select.binary_automation_channel
+        name: 📢 Alert Channel
+        icon: mdi:message-alert
+      - entity: input_text.binary_automation_location
+        name: 📍 Location (Optional)
+        icon: mdi:map-marker
+  - type: horizontal-stack
+    cards:
+      - type: button
+        name: 🔨 Generate YAML
+        icon: mdi:code-braces
+        tap_action:
+          action: call-service
+          service: script.generate_binary_automation_yaml
+      - type: button
+        name: 🔄 Clear Form
+        icon: mdi:refresh
+        tap_action:
+          action: call-service
+          service: script.clear_binary_automation_form
+  - type: markdown
+    title: 🔍 How to Find Binary Sensor Entity IDs
+    content: |
+      **To find binary sensor entity IDs:**
+
+      1. **Developer Tools → States** 
+      2. **Filter by domain**: `binary_sensor.`
+      3. **Look for sensors** like:
+         - `binary_sensor.front_door` (doors)
+         - `binary_sensor.living_room_motion` (motion)
+         - `binary_sensor.bedroom_window` (windows)  
+         - `binary_sensor.smoke_detector` (safety)
+
+      **Common patterns:**
+      - Doors: `binary_sensor.*door*`
+      - Motion: `binary_sensor.*motion*`
+      - Windows: `binary_sensor.*window*`
+      - Safety: `binary_sensor.*smoke*`, `binary_sensor.*gas*`
+  - type: markdown
+    title: 📋 Generated Automation YAML
+    content: >
+      {% set yaml_content = states('input_text.generated_automation_yaml') %}
+
+      {% if yaml_content and yaml_content != 'unknown' and yaml_content != '' %}
+
+      **Copy this YAML to create your automation:**
+
+
+      ```yaml
+
+      {{ yaml_content }}
+
+      ```
+
+
+      **How to use:**
+
+      1. **Select and copy** the YAML code above
+
+      2. Go to **Settings → Automations & Scenes**  
+
+      3. Click **"Create Automation"** → **"Create new automation"**
+
+      4. Click the **⋮ menu** → **"Edit in YAML"**
+
+      5. **Paste the YAML** and **save** your automation
+
+      {% else %}
+
+      **📝 Fill in the form above and click "Generate" to see automation YAML
+      here.**
+
+
+      **Required fields:**
+
+      - Binary sensor entity ID
+
+      - Alert message text
+
+      {% endif %}
+  - type: markdown
+    content: |
+      ## 📖 How to Use This Generator
+
+      ### Quick Start:
+      1. **Go to Developer Tools → States**
+      2. **Filter by "binary_sensor."** to find sensors
+      3. **Copy entity ID** (like `binary_sensor.front_door`)
+      4. **Paste into Entity ID** field
+      5. **Configure settings** (trigger state, message, etc.)
+      6. **Click "Generate"** to create the YAML
+      7. **Copy & paste** into a new automation
+
+      ### Settings Explained:
+      - **Trigger State**: When to send the alert
+        - **ON** = Active state (door opens, motion detected, etc.)  
+        - **OFF** = Inactive state (door closes, motion stops, etc.)
+        - **UNAVAILABLE** = Connection lost or device offline
+      - **Alert Level**: info (blue ℹ️), warning (yellow ⚠️), critical (red 🚨)
+      - **Channel**: Where to send the alert (main/technical/both)
+      - **Location**: Optional room/area information
+
+      ### State Meanings by Device Type:
+      - **Doors/Windows**: ON=Opens, OFF=Closes
+      - **Motion Sensors**: ON=Motion Detected, OFF=Motion Clear  
+      - **Safety Sensors**: ON=Alert Triggered, OFF=Normal
+      - **Covers**: ON=Opens, OFF=Closes
+
+      ### Examples:
+      - **Door Opens**: State=ON, Message="Front door opened"
+      - **Motion Stops**: State=OFF, Message="Living room motion cleared"  
+      - **Device Offline**: State=UNAVAILABLE, Message="Smoke detector offline!"
