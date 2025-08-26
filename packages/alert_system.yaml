@@ -1,8 +1,8 @@
 # packages/alert_system.yaml
-# Version: 4.0.0 - PERSISTENT THRESHOLD ALERTS
-# Added persistent storage for threshold alerts that survive restarts
+# Version: 4.1.0 - FILE-BASED PERSISTENT THRESHOLD ALERTS
+# Added file-based persistent storage for threshold alerts that survive restarts
 # Improved binary automation YAML generator with proper indentation
-# Consolidated and cleaned up legacy code
+# Uses shell commands to read/write to /config/threshold_alerts.txt
 
 script:
   # ===================================
@@ -273,18 +273,55 @@ script:
           include_timestamp: true
 
   # ===================================
-  # PERSISTENT THRESHOLD ALERT SYSTEM
+  # FILE-BASED PERSISTENT THRESHOLD ALERTS
   # ===================================
 
-  distribute_alerts_to_helpers:
-    alias: "Distribute Alerts to UI Helpers"
-    description: "Split persistent alerts into display helpers for the UI"
+  load_threshold_alerts_from_file:
+    alias: "Load Threshold Alerts from File"
+    description: "Load threshold alerts from persistent file storage"
+    sequence:
+      # Create file if it doesn't exist, then read it
+      - action: shell_command.ensure_threshold_file
+      - delay:
+          milliseconds: 500
+      # Read file content into a sensor (we'll create a command_line sensor)
+      - action: homeassistant.update_entity
+        target:
+          entity_id: sensor.threshold_alerts_file_content
+      - delay:
+          milliseconds: 500
+      # Distribute the loaded content to display helpers
+      - action: script.distribute_file_alerts_to_helpers
+
+  save_threshold_alerts_to_file:
+    alias: "Save Threshold Alerts to File"
+    description: "Save current alerts to persistent file storage"
     sequence:
       - variables:
-          all_alerts: "{{ states('input_text.persistent_threshold_alerts').split('|') }}"
-          chunk1: "{{ all_alerts[0:10] | join('|') }}"  # First 10 alerts
-          chunk2: "{{ all_alerts[10:20] | join('|') }}" # Next 10 alerts  
-          chunk3: "{{ all_alerts[20:30] | join('|') }}" # Next 10 alerts
+          # Combine all current alerts from helpers
+          all_alerts: "{{ states('input_text.threshold_entities') }}{% if states('input_text.threshold_entities_2') %}|{{ states('input_text.threshold_entities_2') }}{% endif %}{% if states('input_text.threshold_entities_3') %}|{{ states('input_text.threshold_entities_3') }}{% endif %}"
+          # Clean up empty entries
+          clean_alerts: "{{ all_alerts.split('|') | reject('eq', '') | list | join('|') }}"
+      - action: shell_command.save_threshold_alerts
+        data:
+          alerts: "{{ clean_alerts }}"
+      - delay:
+          milliseconds: 500
+      # Update the sensor to reflect the new file content
+      - action: homeassistant.update_entity
+        target:
+          entity_id: sensor.threshold_alerts_file_content
+
+  distribute_file_alerts_to_helpers:
+    alias: "Distribute File Alerts to Helpers"
+    description: "Distribute alerts from file to UI helpers"
+    sequence:
+      - variables:
+          file_content: "{{ states('sensor.threshold_alerts_file_content') }}"
+          alert_list: "{{ file_content.split('|') if file_content not in ['unknown', 'unavailable', ''] else [] }}"
+          chunk1: "{{ alert_list[0:8] | join('|') }}"
+          chunk2: "{{ alert_list[8:16] | join('|') }}"
+          chunk3: "{{ alert_list[16:24] | join('|') }}"
       - action: input_text.set_value
         target:
           entity_id: input_text.threshold_entities
@@ -301,41 +338,16 @@ script:
         data:
           value: "{{ chunk3 }}"
 
-  backup_threshold_alerts:
-    alias: "Backup Threshold Alerts"
-    description: "Create a backup of current alerts"
-    sequence:
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.threshold_backup
-        data:
-          value: "{{ states('input_text.persistent_threshold_alerts') }}"
-
-  restore_threshold_alerts:
-    alias: "Restore Threshold Alerts"
-    description: "Restore alerts from backup"
-    sequence:
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.persistent_threshold_alerts
-        data:
-          value: "{{ states('input_text.threshold_backup') }}"
-      - action: script.distribute_alerts_to_helpers
-      - action: script.tech_alert
-        data:
-          message: "Threshold alerts restored from backup"
-          level: info
-
   add_persistent_threshold_alert:
     alias: "Add Persistent Threshold Alert"
-    description: "Add alert to persistent storage"
+    description: "Add alert with file-based persistence"
     fields:
       entity_id:
         description: "Entity to monitor"
         required: true
         example: "sensor.temperature"
       threshold:
-        description: "Threshold value" 
+        description: "Threshold value"
         required: true
         example: "25"
       condition:
@@ -352,15 +364,46 @@ script:
           default_message: "{% if condition == 'above' %}{{ entity_name }} is above threshold{% else %}{{ entity_name }} is below threshold{% endif %}"
           alert_message: "{{ custom_message if custom_message else default_message }}"
           new_entry: "{{ entity_id }}:{{ threshold }}:{{ condition }}:{{ alert_message }}"
-          current_alerts: "{{ states('input_text.persistent_threshold_alerts') }}"
-          updated_alerts: "{% if current_alerts %}{{ current_alerts }}|{{ new_entry }}{% else %}{{ new_entry }}{% endif %}"
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.persistent_threshold_alerts
-        data:
-          value: "{{ updated_alerts }}"
-      - action: script.distribute_alerts_to_helpers
-      - action: script.backup_threshold_alerts
+      # Load current alerts from file
+      - action: script.load_threshold_alerts_from_file
+      - delay:
+          seconds: 1
+      # Add to the first helper that has space
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ (states('input_text.threshold_entities') | length + new_entry | length + 1) <= 250 }}"
+            sequence:
+              - action: input_text.set_value
+                target:
+                  entity_id: input_text.threshold_entities
+                data:
+                  value: "{% if states('input_text.threshold_entities') %}{{ states('input_text.threshold_entities') }}|{{ new_entry }}{% else %}{{ new_entry }}{% endif %}"
+          - conditions:
+              - condition: template
+                value_template: "{{ (states('input_text.threshold_entities_2') | length + new_entry | length + 1) <= 250 }}"
+            sequence:
+              - action: input_text.set_value
+                target:
+                  entity_id: input_text.threshold_entities_2
+                data:
+                  value: "{% if states('input_text.threshold_entities_2') %}{{ states('input_text.threshold_entities_2') }}|{{ new_entry }}{% else %}{{ new_entry }}{% endif %}"
+          - conditions:
+              - condition: template
+                value_template: "{{ (states('input_text.threshold_entities_3') | length + new_entry | length + 1) <= 250 }}"
+            sequence:
+              - action: input_text.set_value
+                target:
+                  entity_id: input_text.threshold_entities_3
+                data:
+                  value: "{% if states('input_text.threshold_entities_3') %}{{ states('input_text.threshold_entities_3') }}|{{ new_entry }}{% else %}{{ new_entry }}{% endif %}"
+        default:
+          - action: script.tech_alert
+            data:
+              message: "Error: All threshold storage helpers are full. Maximum 24 alerts supported."
+              level: warning
+      # Save back to file
+      - action: script.save_threshold_alerts_to_file
       - action: script.tech_alert
         data:
           message: "Added persistent threshold alert for {{ entity_name }}: {{ condition }} {{ threshold }}"
@@ -368,24 +411,58 @@ script:
 
   remove_persistent_threshold_alert:
     alias: "Remove Persistent Threshold Alert"
-    description: "Remove alert from persistent storage"
+    description: "Remove alert from file-based persistent storage"
     fields:
       entity_id:
         description: "Entity to remove"
         required: true
     sequence:
-      - variables:
-          current_alerts: "{{ states('input_text.persistent_threshold_alerts') }}"
-          alert_list: "{{ current_alerts.split('|') }}"
-          filtered_list: "{{ alert_list | reject('match', '^' + entity_id + ':.*') | list }}"
-          updated_alerts: "{{ filtered_list | join('|') }}"
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.persistent_threshold_alerts
-        data:
-          value: "{{ updated_alerts }}"
-      - action: script.distribute_alerts_to_helpers
-      - action: script.backup_threshold_alerts
+      # Load current alerts from file
+      - action: script.load_threshold_alerts_from_file
+      - delay:
+          seconds: 1
+      # Remove from each helper
+      - if:
+          - condition: template
+            value_template: "{{ entity_id + ':' in states('input_text.threshold_entities') }}"
+        then:
+          - variables:
+              entries: "{{ states('input_text.threshold_entities').split('|') }}"
+              filtered_entries: "{{ entries | reject('match', '^' + entity_id + ':.*') | list }}"
+              new_content: "{{ filtered_entries | join('|') }}"
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.threshold_entities
+            data:
+              value: "{{ new_content }}"
+      - if:
+          - condition: template
+            value_template: "{{ entity_id + ':' in states('input_text.threshold_entities_2') }}"
+        then:
+          - variables:
+              entries: "{{ states('input_text.threshold_entities_2').split('|') }}"
+              filtered_entries: "{{ entries | reject('match', '^' + entity_id + ':.*') | list }}"
+              new_content: "{{ filtered_entries | join('|') }}"
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.threshold_entities_2
+            data:
+              value: "{{ new_content }}"
+      - if:
+          - condition: template
+            value_template: "{{ entity_id + ':' in states('input_text.threshold_entities_3') }}"
+        then:
+          - variables:
+              entries: "{{ states('input_text.threshold_entities_3').split('|') }}"
+              filtered_entries: "{{ entries | reject('match', '^' + entity_id + ':.*') | list }}"
+              new_content: "{{ filtered_entries | join('|') }}"
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.threshold_entities_3
+            data:
+              value: "{{ new_content }}"
+      # Save back to file
+      - action: script.save_threshold_alerts_to_file
       - action: script.tech_alert
         data:
           message: "Removed persistent threshold alert for {{ entity_id }}"
@@ -477,13 +554,18 @@ script:
     alias: "List Persistent Threshold Alerts"
     description: "Show all configured persistent threshold alerts"
     sequence:
+      - action: homeassistant.update_entity
+        target:
+          entity_id: sensor.threshold_alerts_file_content
+      - delay:
+          milliseconds: 500
       - action: script.tech_alert
         data:
           message: |
             📊 PERSISTENT THRESHOLD ALERTS STATUS
             
-            Persistent Storage: {{ states('input_text.persistent_threshold_alerts') or 'Empty' }}
-            Backup Available: {{ 'Yes' if states('input_text.threshold_backup') != '' else 'No' }}
+            File Content: {{ states('sensor.threshold_alerts_file_content') or 'Empty' }}
+            Total Alerts: {{ states('sensor.threshold_alerts_file_content').split('|') | length if states('sensor.threshold_alerts_file_content') not in ['unknown', 'unavailable', ''] else 0 }}
             
             Format: entity_id:threshold:condition:message
           level: info
@@ -492,11 +574,6 @@ script:
     alias: "Clear All Persistent Threshold Alerts"
     description: "Remove all configured persistent threshold alerts"
     sequence:
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.persistent_threshold_alerts
-        data:
-          value: ""
       - action: input_text.set_value
         target:
           entity_id: input_text.threshold_entities
@@ -512,7 +589,12 @@ script:
           entity_id: input_text.threshold_entities_3
         data:
           value: ""
-      - action: script.backup_threshold_alerts
+      - action: shell_command.clear_threshold_alerts
+      - delay:
+          milliseconds: 500
+      - action: homeassistant.update_entity
+        target:
+          entity_id: sensor.threshold_alerts_file_content
       - action: script.tech_alert
         data:
           message: "All persistent threshold alerts have been cleared"
@@ -653,22 +735,30 @@ script:
           option: "main"
 
 # ===================================
+# SHELL COMMANDS FOR FILE OPERATIONS
+# ===================================
+
+shell_command:
+  ensure_threshold_file: 'touch /config/threshold_alerts.txt'
+  save_threshold_alerts: 'echo "{{ alerts }}" > /config/threshold_alerts.txt'
+  clear_threshold_alerts: 'echo "" > /config/threshold_alerts.txt'
+
+# ===================================
+# COMMAND LINE SENSOR FOR FILE READING
+# ===================================
+
+sensor:
+  - platform: command_line
+    name: threshold_alerts_file_content
+    command: 'cat /config/threshold_alerts.txt 2>/dev/null || echo ""'
+    scan_interval: 60
+
+# ===================================
 # INPUT HELPERS
 # ===================================
 
 input_text:
-  # Persistent storage for threshold alerts (survives restarts)
-  persistent_threshold_alerts:
-    name: "Persistent Threshold Alerts"
-    initial: ""
-    max: 8192
-
-  threshold_backup:
-    name: "Threshold Backup"
-    initial: ""
-    max: 8192
-
-  # Display helpers (for UI compatibility)
+  # Display helpers (for UI compatibility) - correct 255 max
   threshold_entities:
     name: "Threshold Alert Entities"
     initial: ""
@@ -795,22 +885,18 @@ template:
   - sensor:
       - name: "Threshold Alert Count"
         unique_id: "pkg_threshold_alert_count"
-        state: "{% set persistent = states('input_text.persistent_threshold_alerts') %}{{ persistent.split('|') | length if persistent != '' else 0 }}"
+        state: "{% set file_content = states('sensor.threshold_alerts_file_content') %}{{ file_content.split('|') | length if file_content not in ['unknown', 'unavailable', ''] else 0 }}"
         icon: mdi:counter
         
       - name: "Threshold Alert Status"
         unique_id: "pkg_threshold_alert_status"
-        state: "{% if is_state('input_boolean.threshold_alerts_enabled', 'on') %}{% set count = states('sensor.threshold_alert_count') | int %}{% if count > 0 %}Monitoring {{ count }} entities (Persistent){% else %}No entities configured{% endif %}{% else %}Disabled{% endif %}"
+        state: "{% if is_state('input_boolean.threshold_alerts_enabled', 'on') %}{% set count = states('sensor.threshold_alert_count') | int %}{% if count > 0 %}Monitoring {{ count }} entities (File-based){% else %}No entities configured{% endif %}{% else %}Disabled{% endif %}"
         icon: mdi:shield-check
 
       - name: "Binary Automation Form Status"
         unique_id: "pkg_binary_automation_form_status"
         state: "{% set entity = states('input_text.binary_automation_entity') %}{% set message = states('input_text.binary_automation_message') %}{% if entity != '' and entity != 'unknown' and message != '' and message != 'unknown' %}{% if states(entity) not in ['unknown', 'unavailable'] %}Ready to generate{% else %}Invalid entity{% endif %}{% else %}Fill required fields{% endif %}"
         icon: mdi:form-select
-
-      - name: "Threshold Alerts Hash" 
-        unique_id: "threshold_alerts_hash"
-        state: "{{ states('input_text.persistent_threshold_alerts') | hash('md5') }}"
 
 # ===================================
 # AUTOMATIONS 
@@ -819,7 +905,7 @@ template:
 automation:
   - alias: "Threshold Alert Monitor"
     id: "threshold_alert_monitor"
-    description: "Monitor entities for threshold breaches using persistent storage"
+    description: "Monitor entities for threshold breaches using file-based persistence"
     trigger:
       - platform: state
         entity_id: sensor.*
@@ -870,29 +956,19 @@ automation:
                         channel: "{{ states('input_select.threshold_alert_channel') }}"
                         location: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
 
-  - alias: "Auto Backup Threshold Alerts"
-    id: "auto_backup_threshold_alerts"
-    description: "Automatically backup when threshold alerts change"
-    trigger:
-      - platform: state
-        entity_id: sensor.threshold_alerts_hash
-    condition:
-      - condition: template
-        value_template: "{{ trigger.from_state is not none }}"
-    action:
-      - action: script.backup_threshold_alerts
-
   - alias: "Load Threshold Alerts on Startup"
     id: "load_threshold_alerts_startup" 
-    description: "Distribute persistent alerts to display helpers on startup"
+    description: "Load file-based alerts to display helpers on startup"
     trigger:
       - platform: homeassistant
         event: start
     action:
       - delay:
           seconds: 30  # Wait for system to fully start
-      - action: script.distribute_alerts_to_helpers
+      - action: script.load_threshold_alerts_from_file
+      - delay:
+          seconds: 2
       - action: script.tech_alert
         data:
-          message: "Threshold alert system loaded {{ states('sensor.threshold_alert_count') }} persistent alerts"
+          message: "Threshold alert system loaded {{ states('sensor.threshold_alert_count') }} file-based persistent alerts"
           level: info
