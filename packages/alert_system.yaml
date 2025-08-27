@@ -1,5 +1,5 @@
 # packages/alert_system.yaml
-# Version: 4.3.0 - ATTRIBUTE-BASED PERSISTENT THRESHOLD ALERTS
+# Version: 4.3.1 - ATTRIBUTE-BASED PERSISTENT THRESHOLD ALERTS
 # Uses entity attributes with delimited strings for persistence
 # Format: entity:threshold:condition:message§entity:threshold:condition:message
 # No file dependencies, no configuration.yaml changes needed
@@ -681,6 +681,12 @@ input_boolean:
     name: "Threshold Alert Storage"
     initial: true
     icon: mdi:database
+  
+  # Main system toggle
+  threshold_alerts_enabled:
+    name: "Enable Threshold Alerts"
+    initial: true
+    icon: mdi:alert-circle
 
 input_text:
   # Display helpers (for UI compatibility)
@@ -892,10 +898,3 @@ automation:
         data:
           message: "Threshold alert system loaded {{ states('sensor.threshold_alert_count') }} attribute-based persistent alerts"
           level: info
-
-# Missing input_boolean for main system
-input_boolean:
-  threshold_alerts_enabled:
-    name: "Enable Threshold Alerts"
-    initial: true
-    icon: mdi:alert-circle
