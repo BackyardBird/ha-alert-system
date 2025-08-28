@@ -1,5 +1,5 @@
 # packages/alert_system.yaml
-# Version: 4.3.1 - ATTRIBUTE-BASED PERSISTENT THRESHOLD ALERTS
+# Version: 4.3.2 - ATTRIBUTE-BASED PERSISTENT THRESHOLD ALERTS
 # Uses entity attributes with delimited strings for persistence
 # Format: entity:threshold:condition:message§entity:threshold:condition:message
 # No file dependencies, no configuration.yaml changes needed
@@ -542,15 +542,15 @@ script:
 
   generate_binary_automation_yaml:
     alias: "Generate Binary Automation YAML"
-    description: "Generate automation YAML with proper formatting"
+    description: "Generate automation YAML with fixed indentation"
     sequence:
-      # Clear existing YAML first
+      # Clear all fields first
       - action: input_text.set_value
         target:
           entity_id: input_text.generated_automation_yaml
         data:
           value: ""
-      - action: input_text.set_value
+      - action: input_text.set_value  
         target:
           entity_id: input_text.generated_automation_yaml_2
         data:
@@ -560,66 +560,33 @@ script:
           entity_id: input_text.generated_automation_yaml_3
         data:
           value: ""
-      
-      # Get form values
-      - variables:
-          entity: "{{ states('input_text.binary_automation_entity') }}"
-          message: "{{ states('input_text.binary_automation_message') }}"
-          location: "{{ states('input_text.binary_automation_location') }}"
-          trigger_state_raw: "{{ states('input_select.binary_automation_trigger_state') }}"
-          trigger_state: "{% if trigger_state_raw == 'Device Offline' %}unavailable{% else %}{{ trigger_state_raw }}{% endif %}"
-          level: "{{ states('input_select.binary_automation_level') }}"
-          channel: "{{ states('input_select.binary_automation_channel') }}"
 
-      # Simple validation
-      - if:
-          - condition: template
-            value_template: "{{ entity == '' }}"
-        then:
-          - action: persistent_notification.create
-            data:
-              title: "Missing Entity"
-              message: "Please enter a binary sensor entity ID"
-              notification_id: "yaml_error"
-        else:
-          - if:
-              - condition: template
-                value_template: "{{ message == '' }}"
-            then:
-              - action: persistent_notification.create
-                data:
-                  title: "Missing Message"  
-                  message: "Please enter an alert message"
-                  notification_id: "yaml_error"
-            else:
-              # Generate YAML
-              - variables:
-                  entity_name: "{{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title }}"
-                  automation_name: "{{ entity_name }} Alert"
-              
-              - action: input_text.set_value
-                target:
-                  entity_id: input_text.generated_automation_yaml
-                data:
-                  value: "alias: \"{{ automation_name }}\"\ndescription: \"Alert when {{ entity_name }} → {{ trigger_state }}\"\ntrigger:\n- platform: state\n  entity_id: {{ entity }}\n  to: \"{{ trigger_state }}\"\ncondition: []\naction:\n- action: script.send_alert\n  data:"
-              
-              - action: input_text.set_value
-                target:
-                  entity_id: input_text.generated_automation_yaml_2
-                data:
-                  value: "    message: \"{{ message }}\"\n    level: \"{{ level }}\"\n    channel: \"{{ channel }}\"{% if location != '' %}\n    location: \"{{ location }}\"{% endif %}"
-              
-              - action: input_text.set_value
-                target:
-                  entity_id: input_text.generated_automation_yaml_3
-                data:
-                  value: "mode: single"
-              
-              - action: persistent_notification.create
-                data:
-                  title: "YAML Generated"
-                  message: "Automation YAML generated successfully"
-                  notification_id: "yaml_success"
+      # Part 1: Structure ending with data: and newline
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.generated_automation_yaml
+        data:
+          value: "alias: \"Binary Sensor Alert\"\ndescription: \"Alert when sensor changes state\"\ntrigger:\n- platform: state\n  entity_id: {{ states('input_text.binary_automation_entity') }}\n  to: \"{{ states('input_select.binary_automation_trigger_state') }}\"\ncondition: []\naction:\n- action: script.send_alert\n  data:\n    message: \"{{ states('input_text.binary_automation_message') }}\""
+
+      # Part 2: Remaining data fields with proper indentation  
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.generated_automation_yaml_2
+        data:
+          value: "    level: \"{{ states('input_select.binary_automation_level') }}\"\n    channel: \"{{ states('input_select.binary_automation_channel') }}\"\n    location: \"{{ states('input_text.binary_automation_location') }}\""
+
+      # Part 3: Mode
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.generated_automation_yaml_3
+        data:
+          value: "mode: single"
+
+      - action: persistent_notification.create
+        data:
+          title: "YAML Generated"
+          message: "Fixed indentation YAML created"
+          notification_id: "yaml_done"
 
   clear_binary_automation_form:
     alias: "Clear Binary Automation Form"
