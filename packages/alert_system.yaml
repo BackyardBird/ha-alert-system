@@ -1,8 +1,8 @@
 # packages/alert_system.yaml
-# Version: 4.3.2 - ATTRIBUTE-BASED PERSISTENT THRESHOLD ALERTS
-# Uses entity attributes with delimited strings for persistence
-# Format: entity:threshold:condition:message§entity:threshold:condition:message
-# No file dependencies, no configuration.yaml changes needed
+# Version: 4.4.0 - CLEAN FINAL VERSION
+# Core alert system with working binary YAML generator
+# Threshold alerts (non-persistent but functional)
+# Removed all failed persistence attempts and duplicate code
 
 script:
   # ===================================
@@ -273,57 +273,12 @@ script:
           include_timestamp: true
 
   # ===================================
-  # ATTRIBUTE-BASED PERSISTENT THRESHOLD ALERTS
+  # THRESHOLD ALERT SYSTEM SCRIPTS
   # ===================================
 
-  distribute_persistent_alerts_to_helpers:
-    alias: "Distribute Persistent Alerts to Helpers"
-    description: "Load alerts from storage attribute and distribute to display helpers"
-    sequence:
-      - variables:
-          # Get alerts from storage attribute (format: entity:threshold:condition:message§entity:threshold:condition:message)
-          storage_alerts: "{{ state_attr('input_boolean.threshold_alert_storage', 'alerts') or '' }}"
-          alert_list: "{{ storage_alerts.split('§') if storage_alerts != '' else [] }}"
-          # Distribute to helpers with character limits
-          chunk1: "{{ alert_list[0:8] | join('§') }}"
-          chunk2: "{{ alert_list[8:16] | join('§') }}"
-          chunk3: "{{ alert_list[16:24] | join('§') }}"
-      # Convert back to old pipe format for helper compatibility
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.threshold_entities
-        data:
-          value: "{{ chunk1.replace('§', '|') }}"
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.threshold_entities_2
-        data:
-          value: "{{ chunk2.replace('§', '|') }}"
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.threshold_entities_3
-        data:
-          value: "{{ chunk3.replace('§', '|') }}"
-
-  save_helpers_to_persistent_storage:
-    alias: "Save Helpers to Persistent Storage"
-    description: "Save current helper contents to persistent attribute storage"
-    sequence:
-      - variables:
-          # Combine all helpers and convert to new format
-          all_helpers: "{{ states('input_text.threshold_entities') }}|{{ states('input_text.threshold_entities_2') }}|{{ states('input_text.threshold_entities_3') }}"
-          # Clean and convert to new delimiter format
-          clean_alerts: "{{ all_helpers.split('|') | reject('eq', '') | list | join('§') }}"
-      # Update the storage entity attribute
-      - action: input_boolean.turn_on
-        target:
-          entity_id: input_boolean.threshold_alert_storage
-        data:
-          alerts: "{{ clean_alerts }}"
-
-  add_persistent_threshold_alert:
-    alias: "Add Persistent Threshold Alert"
-    description: "Add alert with attribute-based persistence"
+  add_threshold_alert:
+    alias: "Add Threshold Alert"
+    description: "Add an entity to threshold monitoring"
     fields:
       entity_id:
         description: "Entity to monitor"
@@ -345,59 +300,118 @@ script:
       - variables:
           entity_name: "{{ state_attr(entity_id, 'friendly_name') or entity_id.split('.')[1] | replace('_', ' ') | title }}"
           default_message: "{% if condition == 'above' %}{{ entity_name }} is above threshold{% else %}{{ entity_name }} is below threshold{% endif %}"
-          # Escape colons and section signs in message
-          safe_message: "{{ (custom_message if custom_message else default_message) | replace(':', '&#58;') | replace('§', '&#167;') }}"
-          new_entry: "{{ entity_id }}:{{ threshold }}:{{ condition }}:{{ safe_message }}"
-          current_alerts: "{{ state_attr('input_boolean.threshold_alert_storage', 'alerts') or '' }}"
-          updated_alerts: "{% if current_alerts %}{{ current_alerts }}§{{ new_entry }}{% else %}{{ new_entry }}{% endif %}"
-      # Update storage attribute
-      - action: input_boolean.turn_on
-        target:
-          entity_id: input_boolean.threshold_alert_storage
-        data:
-          alerts: "{{ updated_alerts }}"
-      # Refresh display helpers
-      - action: script.distribute_persistent_alerts_to_helpers
-      - action: script.tech_alert
-        data:
-          message: "Added persistent threshold alert for {{ entity_name }}: {{ condition }} {{ threshold }}"
-          level: info
+          alert_message: "{{ custom_message if custom_message else default_message }}"
+          new_entry: "{{ entity_id }}:{{ threshold }}:{{ condition }}:{{ alert_message }}"
+      # Try to add to first available helper
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ (states('input_text.threshold_entities') | length + new_entry | length + 1) <= 250 }}"
+            sequence:
+              - action: input_text.set_value
+                target:
+                  entity_id: input_text.threshold_entities
+                data:
+                  value: "{% if states('input_text.threshold_entities') %}{{ states('input_text.threshold_entities') }}|{{ new_entry }}{% else %}{{ new_entry }}{% endif %}"
+              - action: script.tech_alert
+                data:
+                  message: "Added threshold alert for {{ entity_name }}: {{ condition }} {{ threshold }}"
+                  level: info
+          - conditions:
+              - condition: template
+                value_template: "{{ (states('input_text.threshold_entities_2') | length + new_entry | length + 1) <= 250 }}"
+            sequence:
+              - action: input_text.set_value
+                target:
+                  entity_id: input_text.threshold_entities_2
+                data:
+                  value: "{% if states('input_text.threshold_entities_2') %}{{ states('input_text.threshold_entities_2') }}|{{ new_entry }}{% else %}{{ new_entry }}{% endif %}"
+              - action: script.tech_alert
+                data:
+                  message: "Added threshold alert for {{ entity_name }}: {{ condition }} {{ threshold }}"
+                  level: info
+          - conditions:
+              - condition: template
+                value_template: "{{ (states('input_text.threshold_entities_3') | length + new_entry | length + 1) <= 250 }}"
+            sequence:
+              - action: input_text.set_value
+                target:
+                  entity_id: input_text.threshold_entities_3
+                data:
+                  value: "{% if states('input_text.threshold_entities_3') %}{{ states('input_text.threshold_entities_3') }}|{{ new_entry }}{% else %}{{ new_entry }}{% endif %}"
+              - action: script.tech_alert
+                data:
+                  message: "Added threshold alert for {{ entity_name }}: {{ condition }} {{ threshold }}"
+                  level: info
+        default:
+          - action: script.tech_alert
+            data:
+              message: "Error: All threshold storage helpers are full. Please remove some entities first."
+              level: warning
 
-  remove_persistent_threshold_alert:
-    alias: "Remove Persistent Threshold Alert"
-    description: "Remove alert from attribute-based persistent storage"
+  remove_threshold_alert:
+    alias: "Remove Threshold Alert"
+    description: "Remove an entity from threshold monitoring"
     fields:
       entity_id:
         description: "Entity to remove"
         required: true
     sequence:
-      - variables:
-          current_alerts: "{{ state_attr('input_boolean.threshold_alert_storage', 'alerts') or '' }}"
-          alert_list: "{{ current_alerts.split('§') if current_alerts != '' else [] }}"
-          filtered_list: "{{ alert_list | reject('match', '^' + entity_id + ':.*') | list }}"
-          updated_alerts: "{{ filtered_list | join('§') }}"
-      # Update storage attribute
-      - action: input_boolean.turn_on
-        target:
-          entity_id: input_boolean.threshold_alert_storage
-        data:
-          alerts: "{{ updated_alerts }}"
-      # Refresh display helpers
-      - action: script.distribute_persistent_alerts_to_helpers
+      # Remove from each helper if present
+      - if:
+          - condition: template
+            value_template: "{{ entity_id + ':' in states('input_text.threshold_entities') }}"
+        then:
+          - variables:
+              entries: "{{ states('input_text.threshold_entities').split('|') }}"
+              filtered_entries: "{{ entries | reject('match', '^' + entity_id + ':.*') | list }}"
+              new_content: "{{ filtered_entries | join('|') }}"
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.threshold_entities
+            data:
+              value: "{{ new_content }}"
+      - if:
+          - condition: template
+            value_template: "{{ entity_id + ':' in states('input_text.threshold_entities_2') }}"
+        then:
+          - variables:
+              entries: "{{ states('input_text.threshold_entities_2').split('|') }}"
+              filtered_entries: "{{ entries | reject('match', '^' + entity_id + ':.*') | list }}"
+              new_content: "{{ filtered_entries | join('|') }}"
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.threshold_entities_2
+            data:
+              value: "{{ new_content }}"
+      - if:
+          - condition: template
+            value_template: "{{ entity_id + ':' in states('input_text.threshold_entities_3') }}"
+        then:
+          - variables:
+              entries: "{{ states('input_text.threshold_entities_3').split('|') }}"
+              filtered_entries: "{{ entries | reject('match', '^' + entity_id + ':.*') | list }}"
+              new_content: "{{ filtered_entries | join('|') }}"
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.threshold_entities_3
+            data:
+              value: "{{ new_content }}"
       - action: script.tech_alert
         data:
-          message: "Removed persistent threshold alert for {{ entity_id }}"
+          message: "Remove operation completed for {{ entity_id }}. Use 'List All' to verify."
           level: info
 
   create_threshold_alert_from_form:
     alias: "Create Threshold Alert from Form"
-    description: "Create persistent threshold alert using the card form inputs"
+    description: "Create threshold alert using the card form inputs with improved validation"
     sequence:
       - variables:
           entity_id: "{{ states('input_text.temp_threshold_entity') }}"
           threshold: "{{ states('input_text.temp_threshold_value') }}"
           condition: "{{ states('input_select.temp_threshold_condition') }}"
           message: "{{ states('input_text.temp_threshold_message') }}"
+      # Simple validation
       - choose:
           - conditions:
               - condition: template
@@ -424,7 +438,8 @@ script:
                   message: "Error: Entity '{{ entity_id }}' not found. Please check the entity ID."
                   level: warning
         default:
-          - action: script.add_persistent_threshold_alert
+          # Entity is valid, proceed with creation
+          - action: script.add_threshold_alert
             data:
               entity_id: "{{ entity_id }}"
               threshold: "{{ threshold }}"
@@ -449,7 +464,7 @@ script:
 
   remove_threshold_alert_from_form:
     alias: "Remove Threshold Alert from Form"
-    description: "Remove persistent threshold alert using the card form"
+    description: "Remove threshold alert using the card form"
     sequence:
       - variables:
           entity_id: "{{ states('input_text.temp_remove_entity') }}"
@@ -457,7 +472,7 @@ script:
           - condition: template
             value_template: "{{ entity_id != '' and entity_id != 'unknown' and entity_id != 'unavailable' }}"
         then:
-          - action: script.remove_persistent_threshold_alert
+          - action: script.remove_threshold_alert
             data:
               entity_id: "{{ entity_id }}"
           - action: input_text.set_value
@@ -472,35 +487,25 @@ script:
               level: warning
 
   list_threshold_alerts:
-    alias: "List Persistent Threshold Alerts"
-    description: "Show all configured persistent threshold alerts"
+    alias: "List Threshold Alerts"
+    description: "Show all configured threshold alerts"
     sequence:
-      - variables:
-          storage_alerts: "{{ state_attr('input_boolean.threshold_alert_storage', 'alerts') or '' }}"
-          alert_count: "{{ storage_alerts.split('§') | length if storage_alerts != '' else 0 }}"
       - action: script.tech_alert
         data:
           message: |
-            📊 PERSISTENT THRESHOLD ALERTS STATUS
+            📊 THRESHOLD ALERTS STATUS
             
-            Storage: {{ storage_alerts or 'Empty' }}
-            Total Alerts: {{ alert_count }}
-            Storage Type: Entity Attributes
+            Helper 1: {{ states('input_text.threshold_entities') or 'Empty' }}
+            Helper 2: {{ states('input_text.threshold_entities_2') or 'Empty' }}
+            Helper 3: {{ states('input_text.threshold_entities_3') or 'Empty' }}
             
-            Format: entity:threshold:condition:message
+            Format: entity_id:threshold:condition:message
           level: info
 
   clear_all_threshold_alerts:
-    alias: "Clear All Persistent Threshold Alerts"
-    description: "Remove all configured persistent threshold alerts"
+    alias: "Clear All Threshold Alerts"
+    description: "Remove all configured threshold alerts"
     sequence:
-      # Clear persistent storage
-      - action: input_boolean.turn_on
-        target:
-          entity_id: input_boolean.threshold_alert_storage
-        data:
-          alerts: ""
-      # Clear display helpers
       - action: input_text.set_value
         target:
           entity_id: input_text.threshold_entities
@@ -518,7 +523,7 @@ script:
           value: ""
       - action: script.tech_alert
         data:
-          message: "All persistent threshold alerts have been cleared"
+          message: "All threshold alerts have been cleared"
           level: warning
 
   test_threshold_alert:
@@ -542,7 +547,7 @@ script:
 
   generate_binary_automation_yaml:
     alias: "Generate Binary Automation YAML"
-    description: "Generate automation YAML with fixed indentation"
+    description: "Generate automation YAML with proper formatting"
     sequence:
       # Clear all fields first
       - action: input_text.set_value
@@ -561,32 +566,57 @@ script:
         data:
           value: ""
 
-      # Part 1: Structure ending with data: and newline
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.generated_automation_yaml
-        data:
-          value: "alias: \"Binary Sensor Alert\"\ndescription: \"Alert when sensor changes state\"\ntrigger:\n- platform: state\n  entity_id: {{ states('input_text.binary_automation_entity') }}\n  to: \"{{ states('input_select.binary_automation_trigger_state') }}\"\ncondition: []\naction:\n- action: script.send_alert\n  data:\n    message: \"{{ states('input_text.binary_automation_message') }}\""
+      # Get form values
+      - variables:
+          entity: "{{ states('input_text.binary_automation_entity') }}"
+          message: "{{ states('input_text.binary_automation_message') }}"
+          location: "{{ states('input_text.binary_automation_location') }}"
+          trigger_state_raw: "{{ states('input_select.binary_automation_trigger_state') }}"
+          trigger_state: "{% if trigger_state_raw == 'Device Offline' %}unavailable{% else %}{{ trigger_state_raw }}{% endif %}"
+          level: "{{ states('input_select.binary_automation_level') }}"
+          channel: "{{ states('input_select.binary_automation_channel') }}"
 
-      # Part 2: Remaining data fields with proper indentation  
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.generated_automation_yaml_2
-        data:
-          value: "    level: \"{{ states('input_select.binary_automation_level') }}\"\n    channel: \"{{ states('input_select.binary_automation_channel') }}\"\n    location: \"{{ states('input_text.binary_automation_location') }}\""
+      # Validate and generate
+      - if:
+          - condition: template
+            value_template: "{{ entity == '' or message == '' }}"
+        then:
+          - action: persistent_notification.create
+            data:
+              title: "Missing Required Fields"
+              message: "Please enter both entity ID and message"
+              notification_id: "yaml_error"
+        else:
+          - variables:
+              entity_name: "{{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title }}"
+              automation_name: "{{ entity_name }} Alert"
+          
+          # Part 1: Structure ending with message field
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.generated_automation_yaml
+            data:
+              value: "alias: \"{{ automation_name }}\"\ndescription: \"Alert when {{ entity_name }} → {{ trigger_state }}\"\ntrigger:\n- platform: state\n  entity_id: {{ entity }}\n  to: \"{{ trigger_state }}\"\ncondition: []\naction:\n- action: script.send_alert\n  data:\n    message: \"{{ message }}\""
 
-      # Part 3: Mode
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.generated_automation_yaml_3
-        data:
-          value: "mode: single"
+          # Part 2: Remaining data fields with proper indentation
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.generated_automation_yaml_2
+            data:
+              value: "    level: \"{{ level }}\"\n    channel: \"{{ channel }}\"{% if location != '' %}\n    location: \"{{ location }}\"{% endif %}"
 
-      - action: persistent_notification.create
-        data:
-          title: "YAML Generated"
-          message: "Fixed indentation YAML created"
-          notification_id: "yaml_done"
+          # Part 3: Mode
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.generated_automation_yaml_3
+            data:
+              value: "mode: single"
+
+          - action: persistent_notification.create
+            data:
+              title: "YAML Generated"
+              message: "Automation YAML generated for {{ automation_name }}"
+              notification_id: "yaml_success"
 
   clear_binary_automation_form:
     alias: "Clear Binary Automation Form"
@@ -642,21 +672,8 @@ script:
 # INPUT HELPERS
 # ===================================
 
-input_boolean:
-  # Storage entity for persistent alerts (uses attributes)
-  threshold_alert_storage:
-    name: "Threshold Alert Storage"
-    initial: true
-    icon: mdi:database
-  
-  # Main system toggle
-  threshold_alerts_enabled:
-    name: "Enable Threshold Alerts"
-    initial: true
-    icon: mdi:alert-circle
-
 input_text:
-  # Display helpers (for UI compatibility)
+  # Threshold alert storage helpers
   threshold_entities:
     name: "Threshold Alert Entities"
     initial: ""
@@ -672,7 +689,7 @@ input_text:
     initial: ""
     max: 255
 
-  # Form helpers
+  # Threshold form helpers
   temp_threshold_entity:
     name: "Temporary Threshold Entity"
     initial: ""
@@ -709,7 +726,7 @@ input_text:
     initial: ""
     max: 100
 
-  # Generated YAML storage
+  # Generated YAML storage helpers
   generated_automation_yaml:
     name: "Generated Automation YAML"
     initial: ""
@@ -724,6 +741,12 @@ input_text:
     name: "Generated Automation YAML (Part 3)"
     initial: ""
     max: 255
+
+input_boolean:
+  threshold_alerts_enabled:
+    name: "Enable Threshold Alerts"
+    initial: true
+    icon: mdi:alert-circle
 
 input_select:
   threshold_alert_channel:
@@ -777,12 +800,12 @@ template:
   - sensor:
       - name: "Threshold Alert Count"
         unique_id: "pkg_threshold_alert_count"
-        state: "{% set alerts = state_attr('input_boolean.threshold_alert_storage', 'alerts') or '' %}{{ alerts.split('§') | length if alerts != '' else 0 }}"
+        state: "{% set h1 = states('input_text.threshold_entities') %}{% set h2 = states('input_text.threshold_entities_2') %}{% set h3 = states('input_text.threshold_entities_3') %}{{ (h1.split('|') | length if h1 != '' else 0) + (h2.split('|') | length if h2 != '' else 0) + (h3.split('|') | length if h3 != '' else 0) }}"
         icon: mdi:counter
         
       - name: "Threshold Alert Status"
         unique_id: "pkg_threshold_alert_status"
-        state: "{% if is_state('input_boolean.threshold_alerts_enabled', 'on') %}{% set count = states('sensor.threshold_alert_count') | int %}{% if count > 0 %}Monitoring {{ count }} entities (Attribute-based){% else %}No entities configured{% endif %}{% else %}Disabled{% endif %}"
+        state: "{% if is_state('input_boolean.threshold_alerts_enabled', 'on') %}{% set count = states('sensor.threshold_alert_count') | int %}{% if count > 0 %}Monitoring {{ count }} entities{% else %}No entities configured{% endif %}{% else %}Disabled{% endif %}"
         icon: mdi:shield-check
 
       - name: "Binary Automation Form Status"
@@ -797,7 +820,7 @@ template:
 automation:
   - alias: "Threshold Alert Monitor"
     id: "threshold_alert_monitor"
-    description: "Monitor entities for threshold breaches using persistent attribute storage"
+    description: "Monitor entities for threshold breaches"
     trigger:
       - platform: state
         entity_id: sensor.*
@@ -805,7 +828,7 @@ automation:
       - condition: state
         entity_id: input_boolean.threshold_alerts_enabled
         state: 'on'
-      # Check if this entity is in any of the display helpers
+      # Check if this entity is in any of the helpers
       - condition: or
         conditions:
           - condition: template
@@ -819,7 +842,7 @@ automation:
           triggered_entity: "{{ trigger.entity_id }}"
           new_state: "{{ trigger.to_state.state }}"
           old_state: "{{ trigger.from_state.state if trigger.from_state else 'unknown' }}"
-          # Combine all display helpers content (converted back to pipe format for processing)
+          # Combine all helpers content
           all_content: "{{ states('input_text.threshold_entities') }}|{{ states('input_text.threshold_entities_2') }}|{{ states('input_text.threshold_entities_3') }}"
       # Process all entries to find matching entity
       - repeat:
@@ -833,8 +856,7 @@ automation:
                     parts: "{{ repeat.item.split(':') }}"
                     threshold_value: "{{ parts[1] | float }}"
                     condition_type: "{{ parts[2] }}"
-                    # Decode escaped characters in message
-                    alert_message: "{{ (parts[3] if parts | length > 3 else 'Threshold alert') | replace('&#58;', ':') | replace('&#167;', '§') }}"
+                    alert_message: "{{ parts[3] if parts | length > 3 else 'Threshold alert' }}"
                     current_val: "{{ new_state | float(0) }}"
                     old_val: "{{ old_state | float(0) }}"
                     threshold_crossed: "{% if condition_type == 'above' %}{{ current_val > threshold_value and old_val <= threshold_value }}{% else %}{{ current_val < threshold_value and old_val >= threshold_value }}{% endif %}"
@@ -848,20 +870,3 @@ automation:
                         level: warning
                         channel: "{{ states('input_select.threshold_alert_channel') }}"
                         location: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
-
-  - alias: "Load Threshold Alerts on Startup"
-    id: "load_threshold_alerts_startup" 
-    description: "Load attribute-based alerts to display helpers on startup"
-    trigger:
-      - platform: homeassistant
-        event: start
-    action:
-      - delay:
-          seconds: 30  # Wait for system to fully start
-      - action: script.distribute_persistent_alerts_to_helpers
-      - delay:
-          seconds: 2
-      - action: script.tech_alert
-        data:
-          message: "Threshold alert system loaded {{ states('sensor.threshold_alert_count') }} attribute-based persistent alerts"
-          level: info
