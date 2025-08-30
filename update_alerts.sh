@@ -5,29 +5,54 @@
 echo "🔄 Updating Home Assistant Alert System..."
 
 # Navigate to packages directory
-cd /config/packages/
+cd /config/packages/ || exit 1
 
-# Backup current version
+########################
+# Update alert_system.yaml
+########################
 if [ -f "alert_system.yaml" ]; then
     cp alert_system.yaml alert_system.yaml.backup.$(date +%Y%m%d_%H%M%S)
-    echo "✅ Backed up current version"
+    echo "✅ Backed up current alert_system.yaml"
 fi
 
-# Download latest version
-echo "📥 Downloading latest version from GitHub..."
+echo "📥 Downloading latest alert_system.yaml from GitHub..."
 wget -O alert_system.yaml.tmp https://raw.githubusercontent.com/BackyardBird/ha-alert-system/main/packages/alert_system.yaml
 
-# Check if download was successful
 if [ $? -eq 0 ]; then
     mv alert_system.yaml.tmp alert_system.yaml
     echo "✅ Successfully updated alert_system.yaml"
-    echo "🔄 Restart Home Assistant to apply changes"
-    echo ""
-    echo "📋 Recent changes:"
-    echo "   - Check your GitHub repository for latest commits"
-    echo "   - Remember to test all alert types after restart"
 else
-    echo "❌ Failed to download update"
+    echo "❌ Failed to download alert_system.yaml"
     rm -f alert_system.yaml.tmp
     exit 1
 fi
+
+########################
+# Update alert_system-dash.yaml
+########################
+if [ -f "alert_system-dash.yaml" ]; then
+    cp alert_system-dash.yaml alert_system-dash.yaml.backup.$(date +%Y%m%d_%H%M%S)
+    echo "✅ Backed up current alert_system-dash.yaml"
+fi
+
+echo "📥 Downloading latest alert_system-dash.yaml from GitHub..."
+wget -O alert_system-dash.yaml.tmp https://raw.githubusercontent.com/BackyardBird/ha-alert-system/main/packages/alert_system-dash.yaml
+
+if [ $? -eq 0 ]; then
+    mv alert_system-dash.yaml.tmp alert_system-dash.yaml
+    echo "✅ Successfully updated alert_system-dash.yaml"
+else
+    echo "❌ Failed to download alert_system-dash.yaml"
+    rm -f alert_system-dash.yaml.tmp
+    exit 1
+fi
+
+########################
+# Final notes
+########################
+echo "🔄 Restart Home Assistant to apply changes"
+echo ""
+echo "📋 Recent changes:"
+echo "   - Check your GitHub repository for latest commits"
+echo "   - Remember to test all alert types after restart"
+
