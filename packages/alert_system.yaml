@@ -1,5 +1,5 @@
 # packages/alert_system.yaml
-# Version: 5.0.2 - FINAL VERSION
+# Version: 5.0.3 - FINAL VERSION
 # Core alert system with working binary YAML generator
 
 script:
@@ -723,58 +723,63 @@ template:
 # ===================================
 
 automation:
-  alias: "Threshold Alert Monitor"
-  id: "threshold_alert_monitor"
-  description: "Monitor entities for threshold breaches"
-  trigger:
-    - platform: event
-      event_type: state_changed
-  condition:
-    - condition: state
-      entity_id: input_boolean.threshold_alerts_enabled
-      state: "on"
-    # Only process sensor entities
-    - condition: template
-      value_template: "{{ trigger.event.data.entity_id.startswith('sensor.') }}"
-    # Check if this entity is in any of the helpers
-    - condition: or
-      conditions:
-        - condition: template
-          value_template: "{{ trigger.event.data.entity_id + ':' in states('input_text.threshold_entities') }}"
-        - condition: template
-          value_template: "{{ trigger.event.data.entity_id + ':' in states('input_text.threshold_entities_2') }}"
-        - condition: template
-          value_template: "{{ trigger.event.data.entity_id + ':' in states('input_text.threshold_entities_3') }}"
-  action:
-    - variables:
-        triggered_entity: "{{ trigger.event.data.entity_id }}"
-        new_state: "{{ trigger.event.data.new_state.state }}"
-        old_state: "{{ trigger.event.data.old_state.state if trigger.event.data.old_state else 'unknown' }}"
-        # Combine all helpers content
-        all_content: "{{ states('input_text.threshold_entities') }}|{{ states('input_text.threshold_entities_2') }}|{{ states('input_text.threshold_entities_3') }}"
-    # Process all entries to find matching entity
-    - repeat:
-        for_each: "{{ all_content.split('|') }}"
-        sequence:
-          - if:
-              - condition: template
-                value_template: "{{ repeat.item != '' and repeat.item.startswith(triggered_entity + ':') }}"
-            then:
-              - variables:
-                  parts: "{{ repeat.item.split(':') }}"
-                  threshold_value: "{{ parts[1] | float }}"
-                  condition_type: "{{ parts[2] }}"
-                  alert_message: "{{ parts[3] if parts | length > 3 else 'Threshold alert' }}"
-                  current_val: "{{ new_state | float(0) }}"
-                  old_val: "{{ old_state | float(0) }}"
-                  threshold_crossed: "{% if condition_type == 'above' %}{{ current_val > threshold_value and old_val <= threshold_value }}{% else %}{{ current_val < threshold_value and old_val >= threshold_value }}{% endif %}"
-              - if:
-                  - condition: template
-                    value_template: "{{ threshold_crossed }}"
-                then:
-                  - action: script.send_alert
-                    data:
-                      message: "🚨 {{ alert_message }} - Current: {{ new_state }}{{ state_attr(triggered_entity, 'unit_of_measurement') or '' }} - Threshold: {{ condition_type }} {{ threshold_value }}{{ state_attr(triggered_entity, 'unit_of_measurement') or '' }}"
-                      level: warning
-                      channel: "{{ states('input_select.threshold_alert_channel') }}"
-                      location: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
+  - alias: "Threshold Alert Monitor"
+    id: "threshold_alert_monitor"
+    description: "Monitor entities for threshold breaches"
+    trigger:
+      - platform: event
+        event_type: state_changed
+    condition:
+      - condition: state
+        entity_id: input_boolean.threshold_alerts_enabled
+        state: "on"
+      # Only process sensor entities
+      - condition: template
+        value_template: "{{ trigger.event.data.entity_id.startswith('sensor.') }}"
+      # Check if this entity is in any of the helpers
+      - condition: or
+        conditions:
+          - condition: template
+            value_template: "{{ trigger.event.data.entity_id + ':' in states('input_text.threshold_entities') }}"
+          - condition: template
+            value_template: "{{ trigger.event.data.entity_id + ':' in states('input_text.threshold_entities_2') }}"
+          - condition: template
+            value_template: "{{ trigger.event.data.entity_id + ':' in states('input_text.threshold_entities_3') }}"
+    action:
+      - variables:
+          triggered_entity: "{{ trigger.event.data.entity_id }}"
+          new_state: "{{ trigger.event.data.new_state.state }}"
+          old_state: "{{ trigger.event.data.old_state.state if trigger.event.data.old_state else 'unknown' }}"
+          # Combine all helpers content
+          all_content: "{{ states('input_text.threshold_entities') }}|{{ states('input_text.threshold_entities_2') }}|{{ states('input_text.threshold_entities_3') }}"
+      # Process all entries to find matching entity
+      - repeat:
+          for_each: "{{ all_content.split('|') }}"
+          sequence:
+            - if:
+                - condition: template
+                  value_template: "{{ repeat.item != '' and repeat.item.startswith(triggered_entity + ':') }}"
+              then:
+                - variables:
+                    parts: "{{ repeat.item.split(':') }}"
+                    threshold_value: "{{ parts[1] | float }}"
+                    condition_type: "{{ parts[2] }}"
+                    alert_message: "{{ parts[3] if parts | length > 3 else 'Threshold alert' }}"
+                    current_val: "{{ new_state | float(0) }}"
+                    old_val: "{{ old_state | float(0) }}"
+                    threshold_crossed: "{% if condition_type == 'above' %}{{ current_val > threshold_value and old_val <= threshold_value }}{% else %}{{ current_val < threshold_value and old_val >= threshold_value }}{% endif %}"
+                    # Better unit and number formatting
+                    unit_of_measurement: "{{ state_attr(triggered_entity, 'unit_of_measurement') or '' }}"
+                    current_formatted: "{% if current_val == current_val | int %}{{ current_val | int }}{% else %}{{ current_val | round(1) }}{% endif %}"
+                    threshold_formatted: "{% if threshold_value == threshold_value | int %}{{ threshold_value | int }}{% else %}{{ threshold_value | round(1) }}{% endif %}"
+                    unit_display: "{% if unit_of_measurement %}{{ ' ' + unit_of_measurement }}{% else %}{% endif %}"
+                - if:
+                    - condition: template
+                      value_template: "{{ threshold_crossed }}"
+                  then:
+                    - action: script.send_alert
+                      data:
+                        message: "🚨 {{ alert_message }} - Current: {{ current_formatted }}{{ unit_display }} - Threshold: {{ condition_type }} {{ threshold_formatted }}{{ unit_display }}"
+                        level: warning
+                        channel: "{{ states('input_select.threshold_alert_channel') }}"
+                        location: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
