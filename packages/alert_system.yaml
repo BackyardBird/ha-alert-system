@@ -1,5 +1,5 @@
 # packages/alert_system.yaml
-# Version: 5.0.0 - FINAL VERSION
+# Version: 5.0.1 - FINAL VERSION
 # Core alert system with working binary YAML generator
 
 script:
@@ -544,20 +544,17 @@ script:
 # ===================================
 
 input_text:
-  # Threshold alert storage helpers
+  # Threshold alert storage helpers - REMOVED initial: "" to preserve data across reboots
   threshold_entities:
     name: "Threshold Alert Entities"
-    initial: ""
     max: 255
 
   threshold_entities_2:
     name: "Threshold Alert Entities (Group 2)"
-    initial: ""
     max: 255
 
   threshold_entities_3:
     name: "Threshold Alert Entities (Group 3)"
-    initial: ""
     max: 255
 
   # Threshold form helpers
@@ -596,22 +593,6 @@ input_text:
     name: "Binary Automation Location"
     initial: ""
     max: 100
-
-  # # Generated YAML storage helpers
-  # generated_automation_yaml:
-  #   name: "Generated Automation YAML"
-  #   initial: ""
-  #   max: 255
-
-  # generated_automation_yaml_2:
-  #   name: "Generated Automation YAML (Part 2)"
-  #   initial: ""
-  #   max: 255
-
-  # generated_automation_yaml_3:
-  #   name: "Generated Automation YAML (Part 3)"
-  #   initial: ""
-  #   max: 255
 
 input_boolean:
   threshold_alerts_enabled:
