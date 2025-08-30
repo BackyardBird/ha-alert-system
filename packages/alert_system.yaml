@@ -538,6 +538,59 @@ script:
           level: info
           channel: "{{ states('input_select.threshold_alert_channel') }}"
           location: "Test System"
+# ===================================
+# BINARY SENSOR AUTOMATION GENERATOR
+# ===================================
+
+  clear_binary_automation_form:
+    alias: "Clear Binary Automation Form"
+    description: "Reset all form fields"
+    sequence:
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.binary_automation_entity
+        data:
+          value: ""
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.binary_automation_message
+        data:
+          value: ""
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.binary_automation_location
+        data:
+          value: ""
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.generated_automation_yaml
+        data:
+          value: ""
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.generated_automation_yaml_2
+        data:
+          value: ""
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.generated_automation_yaml_3
+        data:
+          value: ""
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.binary_automation_trigger_state
+        data:
+          option: "on"
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.binary_automation_level
+        data:
+          option: "warning"
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.binary_automation_channel
+        data:
+          option: "main"
 
 # ===================================
 # INPUT HELPERS
