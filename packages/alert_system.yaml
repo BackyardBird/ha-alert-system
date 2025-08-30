@@ -8,7 +8,7 @@ script:
   # ===================================
   # CORE ALERT SYSTEM SCRIPTS
   # ===================================
-  
+
   send_alert:
     alias: "Send Alert"
     description: "Send a formatted alert via Telegram"
@@ -494,11 +494,11 @@ script:
         data:
           message: |
             📊 THRESHOLD ALERTS STATUS
-            
+
             Helper 1: {{ states('input_text.threshold_entities') or 'Empty' }}
             Helper 2: {{ states('input_text.threshold_entities_2') or 'Empty' }}
             Helper 3: {{ states('input_text.threshold_entities_3') or 'Empty' }}
-            
+
             Format: entity_id:threshold:condition:message
           level: info
 
@@ -534,139 +534,12 @@ script:
         data:
           message: |
             🧪 THRESHOLD ALERT TEST
-            
+
             This is a test of the threshold alert system.
             Current time: {{ now().strftime('%H:%M:%S') }}
           level: info
           channel: "{{ states('input_select.threshold_alert_channel') }}"
           location: "Test System"
-
-  # ===================================
-  # BINARY SENSOR AUTOMATION GENERATOR
-  # ===================================
-
-  generate_binary_automation_yaml:
-    alias: "Generate Binary Automation YAML"
-    description: "Generate automation YAML with proper formatting"
-    sequence:
-      # Clear all fields first
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.generated_automation_yaml
-        data:
-          value: ""
-      - action: input_text.set_value  
-        target:
-          entity_id: input_text.generated_automation_yaml_2
-        data:
-          value: ""
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.generated_automation_yaml_3
-        data:
-          value: ""
-
-      # Get form values
-      - variables:
-          entity: "{{ states('input_text.binary_automation_entity') }}"
-          message: "{{ states('input_text.binary_automation_message') }}"
-          location: "{{ states('input_text.binary_automation_location') }}"
-          trigger_state_raw: "{{ states('input_select.binary_automation_trigger_state') }}"
-          trigger_state: "{% if trigger_state_raw == 'Device Offline' %}unavailable{% else %}{{ trigger_state_raw }}{% endif %}"
-          level: "{{ states('input_select.binary_automation_level') }}"
-          channel: "{{ states('input_select.binary_automation_channel') }}"
-
-      # Validate and generate
-      - if:
-          - condition: template
-            value_template: "{{ entity == '' or message == '' }}"
-        then:
-          - action: persistent_notification.create
-            data:
-              title: "Missing Required Fields"
-              message: "Please enter both entity ID and message"
-              notification_id: "yaml_error"
-        else:
-          - variables:
-              entity_name: "{{ state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title }}"
-              automation_name: "{{ entity_name }} Alert"
-          
-          # Part 1: Structure ending with message field
-          - action: input_text.set_value
-            target:
-              entity_id: input_text.generated_automation_yaml
-            data:
-              value: "alias: \"{{ automation_name }}\"\ndescription: \"Alert when {{ entity_name }} → {{ trigger_state }}\"\ntrigger:\n- platform: state\n  entity_id: {{ entity }}\n  to: \"{{ trigger_state }}\"\ncondition: []\naction:\n- action: script.send_alert\n  data:\n    message: \"{{ message }}\""
-
-          # Part 2: Remaining data fields with proper indentation
-          - action: input_text.set_value
-            target:
-              entity_id: input_text.generated_automation_yaml_2
-            data:
-              value: "    level: \"{{ level }}\"\n    channel: \"{{ channel }}\"{% if location != '' %}\n    location: \"{{ location }}\"{% endif %}"
-
-          # Part 3: Mode
-          - action: input_text.set_value
-            target:
-              entity_id: input_text.generated_automation_yaml_3
-            data:
-              value: "mode: single"
-
-          - action: persistent_notification.create
-            data:
-              title: "YAML Generated"
-              message: "Automation YAML generated for {{ automation_name }}"
-              notification_id: "yaml_success"
-
-  clear_binary_automation_form:
-    alias: "Clear Binary Automation Form"
-    description: "Reset all form fields"
-    sequence:
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.binary_automation_entity
-        data:
-          value: ""
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.binary_automation_message
-        data:
-          value: ""
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.binary_automation_location
-        data:
-          value: ""
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.generated_automation_yaml
-        data:
-          value: ""
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.generated_automation_yaml_2
-        data:
-          value: ""
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.generated_automation_yaml_3
-        data:
-          value: ""
-      - action: input_select.select_option
-        target:
-          entity_id: input_select.binary_automation_trigger_state
-        data:
-          option: "on"
-      - action: input_select.select_option
-        target:
-          entity_id: input_select.binary_automation_level
-        data:
-          option: "warning"
-      - action: input_select.select_option
-        target:
-          entity_id: input_select.binary_automation_channel
-        data:
-          option: "main"
 
 # ===================================
 # INPUT HELPERS
@@ -685,7 +558,7 @@ input_text:
     max: 255
 
   threshold_entities_3:
-    name: "Threshold Alert Entities (Group 3)" 
+    name: "Threshold Alert Entities (Group 3)"
     initial: ""
     max: 255
 
@@ -726,21 +599,21 @@ input_text:
     initial: ""
     max: 100
 
-  # Generated YAML storage helpers
-  generated_automation_yaml:
-    name: "Generated Automation YAML"
-    initial: ""
-    max: 255
+  # # Generated YAML storage helpers
+  # generated_automation_yaml:
+  #   name: "Generated Automation YAML"
+  #   initial: ""
+  #   max: 255
 
-  generated_automation_yaml_2:
-    name: "Generated Automation YAML (Part 2)"
-    initial: ""
-    max: 255
+  # generated_automation_yaml_2:
+  #   name: "Generated Automation YAML (Part 2)"
+  #   initial: ""
+  #   max: 255
 
-  generated_automation_yaml_3:
-    name: "Generated Automation YAML (Part 3)"
-    initial: ""
-    max: 255
+  # generated_automation_yaml_3:
+  #   name: "Generated Automation YAML (Part 3)"
+  #   initial: ""
+  #   max: 255
 
 input_boolean:
   threshold_alerts_enabled:
@@ -787,7 +660,7 @@ input_select:
     name: "Binary Automation Trigger State"
     options:
       - "on"
-      - "off"  
+      - "off"
       - "Device Offline"
     initial: "on"
     icon: mdi:state-machine
@@ -802,7 +675,7 @@ template:
         unique_id: "pkg_threshold_alert_count"
         state: "{% set h1 = states('input_text.threshold_entities') %}{% set h2 = states('input_text.threshold_entities_2') %}{% set h3 = states('input_text.threshold_entities_3') %}{{ (h1.split('|') | length if h1 != '' else 0) + (h2.split('|') | length if h2 != '' else 0) + (h3.split('|') | length if h3 != '' else 0) }}"
         icon: mdi:counter
-        
+
       - name: "Threshold Alert Status"
         unique_id: "pkg_threshold_alert_status"
         state: "{% if is_state('input_boolean.threshold_alerts_enabled', 'on') %}{% set count = states('sensor.threshold_alert_count') | int %}{% if count > 0 %}Monitoring {{ count }} entities{% else %}No entities configured{% endif %}{% else %}Disabled{% endif %}"
@@ -814,7 +687,7 @@ template:
         icon: mdi:form-select
 
 # ===================================
-# AUTOMATIONS 
+# AUTOMATIONS
 # ===================================
 
 automation:
@@ -827,7 +700,7 @@ automation:
     condition:
       - condition: state
         entity_id: input_boolean.threshold_alerts_enabled
-        state: 'on'
+        state: "on"
       # Check if this entity is in any of the helpers
       - condition: or
         conditions:
