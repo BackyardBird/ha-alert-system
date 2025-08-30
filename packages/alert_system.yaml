@@ -1,5 +1,5 @@
 # packages/alert_system.yaml
-# Version: 5.0.4a - FINAL VERSION
+# Version: 5.0.5 - FINAL VERSION
 # Core alert system with working binary YAML generator
 
 script:
@@ -750,9 +750,7 @@ automation:
           triggered_entity: "{{ trigger.event.data.entity_id }}"
           new_state: "{{ trigger.event.data.new_state.state }}"
           old_state: "{{ trigger.event.data.old_state.state if trigger.event.data.old_state else 'unknown' }}"
-          # Combine all helpers content
           all_content: "{{ states('input_text.threshold_entities') }}|{{ states('input_text.threshold_entities_2') }}|{{ states('input_text.threshold_entities_3') }}"
-      # Process all entries to find matching entity
       - repeat:
           for_each: "{{ all_content.split('|') }}"
           sequence:
@@ -767,19 +765,36 @@ automation:
                     alert_message: "{{ parts[3] if parts | length > 3 else 'Threshold alert' }}"
                     current_val: "{{ new_state | float(0) }}"
                     old_val: "{{ old_state | float(0) }}"
-                    threshold_crossed: "{% if condition_type == 'above' %}{{ current_val > threshold_value and old_val <= threshold_value }}{% else %}{{ current_val < threshold_value and old_val >= threshold_value }}{% endif %}"
-                    # Better unit and number formatting
-                    unit_of_measurement: "{{ state_attr(triggered_entity, 'unit_of_measurement') or '' }}"
-                    current_formatted: "{% if current_val == current_val | int %}{{ current_val | int }}{% else %}{{ current_val | round(1) }}{% endif %}"
-                    threshold_formatted: "{% if threshold_value == threshold_value | int %}{{ threshold_value | int }}{% else %}{{ threshold_value | round(1) }}{% endif %}"
-                    unit_display: "{% if unit_of_measurement %}{{ ' ' + unit_of_measurement }}{% else %}{% endif %}"
+                    threshold_crossed: >
+                      {% if condition_type == 'above' %}
+                        {{ current_val > threshold_value and old_val <= threshold_value }}
+                      {% else %}
+                        {{ current_val < threshold_value and old_val >= threshold_value }}
+                      {% endif %}
+                    # Unit handling variables
+                    unit_raw: "{{ state_attr(triggered_entity, 'unit_of_measurement') }}"
+                    has_unit: "{{ unit_raw is not none and unit_raw != '' }}"
+                    unit_text: "{{ ' ' + unit_raw if has_unit else '' }}"
+                    # Number formatting
+                    current_clean: >
+                      {% if current_val == (current_val | int) %}
+                        {{ current_val | int }}
+                      {% else %}
+                        {{ current_val | round(1) }}
+                      {% endif %}
+                    threshold_clean: >
+                      {% if threshold_value == (threshold_value | int) %}
+                        {{ threshold_value | int }}
+                      {% else %}
+                        {{ threshold_value | round(1) }}
+                      {% endif %}
                 - if:
                     - condition: template
                       value_template: "{{ threshold_crossed }}"
                   then:
                     - action: script.send_alert
                       data:
-                        message: "🚨 {{ alert_message }} - Current: {{ current_formatted }}{{ unit_display }} - Threshold: {{ condition_type }} {{ threshold_formatted }}{{ unit_display }}"
+                        message: "🚨 {{ alert_message }} - Current: {{ current_clean }}{{ unit_text }} - Threshold: {{ condition_type }} {{ threshold_clean }}{{ unit_text }}"
                         level: warning
                         channel: "{{ states('input_select.threshold_alert_channel') }}"
                         location: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
