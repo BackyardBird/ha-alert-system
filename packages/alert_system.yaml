@@ -1,5 +1,5 @@
 # packages/alert_system.yaml
-# Version: 5.0.6 - FINAL VERSION
+# Version: 5.0.7 - FINAL VERSION
 # Core alert system with working binary YAML generator
 
 script:
@@ -676,7 +676,7 @@ input_select:
       - info
       - warning
       - critical
-    initial: ""
+    initial: "warning"
     icon: mdi:alert
 
   binary_automation_channel:
@@ -685,7 +685,7 @@ input_select:
       - main
       - technical
       - both
-    initial: ""
+    initial: "technical"
     icon: mdi:message-alert
 
   binary_automation_trigger_state:
@@ -694,7 +694,7 @@ input_select:
       - "on"
       - "off"
       - "Device Offline"
-    initial: ""
+    initial: "on"
     icon: mdi:state-machine
 
 # ===================================
