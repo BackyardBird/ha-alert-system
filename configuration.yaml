@@ -1,0 +1,16 @@
+lovelace:
+  mode: storage
+  # Add yaml dashboards
+  dashboards:
+    alert-system:
+      mode: yaml
+      title: Alert System
+      icon: mdi:script
+      show_in_sidebar: true
+      filename: lovelace/alert_system_dash.yaml
+    # UI-based dashboards  
+    # experimental:
+    #   mode: storage
+    #   title: Experimental
+    #   icon: mdi:test-tube
+    #   show_in_sidebar: true
