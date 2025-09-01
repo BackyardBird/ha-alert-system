@@ -1,5 +1,5 @@
 # packages/alert_system.yaml
-# Version: 5.0.7 - FINAL VERSION
+# Version: 5.1.0 - identifies when devices go offline/online and alerts accordingly
 # Core alert system with working binary YAML generator
 
 script:
@@ -725,18 +725,16 @@ template:
 automation:
   - alias: "Threshold Alert Monitor"
     id: "threshold_alert_monitor"
-    description: "Monitor entities for threshold breaches"
+    description: "Monitor entities for threshold breaches with device availability alerts"
     trigger:
-      - platform: event
+      - trigger: event
         event_type: state_changed
     condition:
       - condition: state
         entity_id: input_boolean.threshold_alerts_enabled
         state: "on"
-      # Only process sensor entities
       - condition: template
         value_template: "{{ trigger.event.data.entity_id.startswith('sensor.') }}"
-      # Check if this entity is in any of the helpers
       - condition: or
         conditions:
           - condition: template
@@ -751,50 +749,72 @@ automation:
           new_state: "{{ trigger.event.data.new_state.state }}"
           old_state: "{{ trigger.event.data.old_state.state if trigger.event.data.old_state else 'unknown' }}"
           all_content: "{{ states('input_text.threshold_entities') }}|{{ states('input_text.threshold_entities_2') }}|{{ states('input_text.threshold_entities_3') }}"
-      - repeat:
-          for_each: "{{ all_content.split('|') }}"
-          sequence:
-            - if:
-                - condition: template
-                  value_template: "{{ repeat.item != '' and repeat.item.startswith(triggered_entity + ':') }}"
-              then:
-                - variables:
-                    parts: "{{ repeat.item.split(':') }}"
-                    threshold_value: "{{ parts[1] | float }}"
-                    condition_type: "{{ parts[2] }}"
-                    alert_message: "{{ parts[3] if parts | length > 3 else 'Threshold alert' }}"
-                    current_val: "{{ new_state | float(0) }}"
-                    old_val: "{{ old_state | float(0) }}"
-                    threshold_crossed: >
-                      {% if condition_type == 'above' %}
-                        {{ current_val > threshold_value and old_val <= threshold_value }}
-                      {% else %}
-                        {{ current_val < threshold_value and old_val >= threshold_value }}
-                      {% endif %}
-                    # Unit handling variables
-                    unit_raw: "{{ state_attr(triggered_entity, 'unit_of_measurement') }}"
-                    has_unit: "{{ unit_raw is not none and unit_raw != '' }}"
-                    unit_text: "{{ ' ' + unit_raw if has_unit else '' }}"
-                    # Number formatting
-                    current_clean: >
-                      {% if current_val == (current_val | int) %}
-                        {{ current_val | int }}
-                      {% else %}
-                        {{ current_val | round(1) }}
-                      {% endif %}
-                    threshold_clean: >
-                      {% if threshold_value == (threshold_value | int) %}
-                        {{ threshold_value | int }}
-                      {% else %}
-                        {{ threshold_value | round(1) }}
-                      {% endif %}
+          # Check if states are numeric (availability check)
+          new_is_number: "{{ new_state | regex_match('^-?[0-9]+\\.?[0-9]*$') }}"
+          old_is_number: "{{ old_state | regex_match('^-?[0-9]+\\.?[0-9]*$') }}"
+          device_went_offline: "{{ old_is_number and not new_is_number and new_state in ['unavailable', 'unknown'] }}"
+          device_came_online: "{{ not old_is_number and new_is_number and old_state in ['unavailable', 'unknown'] }}"
+      
+      # Handle device going offline
+      - if:
+          - condition: template
+            value_template: "{{ device_went_offline }}"
+        then:
+          - action: script.send_alert
+            data:
+              message: "📵 DEVICE OFFLINE: {{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }} is now {{ new_state }}"
+              level: "warning"
+              channel: "technical"
+              location: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
+      
+      # Handle device coming back online
+      - if:
+          - condition: template
+            value_template: "{{ device_came_online }}"
+        then:
+          - variables:
+              unit_raw: "{{ state_attr(triggered_entity, 'unit_of_measurement') }}"
+              unit_text: "{% if unit_raw %}{{ ' ' + unit_raw }}{% else %}{% endif %}"
+              current_clean: "{{ new_state | float | int if (new_state | float) == (new_state | float | int) else (new_state | float | round(1)) }}"
+          - action: script.send_alert
+            data:
+              message: "📶 DEVICE ONLINE: {{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }} is back online ({{ current_clean }}{{ unit_text }})"
+              level: "info"
+              channel: "technical"
+              location: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
+      
+      # Process threshold logic only if both states are numeric
+      - if:
+          - condition: template
+            value_template: "{{ new_is_number and old_is_number }}"
+        then:
+          - repeat:
+              for_each: "{{ all_content.split('|') }}"
+              sequence:
                 - if:
                     - condition: template
-                      value_template: "{{ threshold_crossed }}"
+                      value_template: "{{ repeat.item != '' and repeat.item.startswith(triggered_entity + ':') }}"
                   then:
-                    - action: script.send_alert
-                      data:
-                        message: "🚨 {{ alert_message }} - Current: {{ current_clean }}{{ unit_text }} - Threshold: {{ condition_type }} {{ threshold_clean }}{{ unit_text }}"
-                        level: warning
-                        channel: "{{ states('input_select.threshold_alert_channel') }}"
-                        location: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
+                    - variables:
+                        parts: "{{ repeat.item.split(':') }}"
+                        threshold_value: "{{ parts[1] | float }}"
+                        condition_type: "{{ parts[2] }}"
+                        alert_message: "{{ parts[3] if parts | length > 3 else 'Threshold alert' }}"
+                        current_val: "{{ new_state | float }}"
+                        old_val: "{{ old_state | float }}"
+                        threshold_crossed: "{% if condition_type == 'above' %}{{ current_val > threshold_value and old_val <= threshold_value }}{% else %}{{ current_val < threshold_value and old_val >= threshold_value }}{% endif %}"
+                    - if:
+                        - condition: template
+                          value_template: "{{ threshold_crossed }}"
+                      then:
+                        - variables:
+                            unit_raw: "{{ state_attr(triggered_entity, 'unit_of_measurement') }}"
+                            unit_text: "{% if unit_raw %}{{ ' ' + unit_raw }}{% else %}{% endif %}"
+                            current_clean: "{% if current_val == (current_val | int) %}{{ current_val | int }}{% else %}{{ current_val | round(1) }}{% endif %}"
+                            threshold_clean: "{% if threshold_value == (threshold_value | int) %}{{ threshold_value | int }}{% else %}{{ threshold_value | round(1) }}{% endif %}"
+                        - action: script.send_alert
+                          data:
+                            message: "🚨 {{ alert_message }} - Current: {{ current_clean }}{{ unit_text }} - Threshold: {{ condition_type }} {{ threshold_clean }}{{ unit_text }}"
+                            level: warning
+                            channel: "{{ states('input_select.threshold_alert_channel') }}"
+                            location: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
