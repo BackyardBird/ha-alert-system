@@ -1,5 +1,5 @@
 # packages/alert_system.yaml
-# Version: 5.1.0 - identifies when devices go offline/online and alerts accordingly
+# Version: 5.1.1 - identifies when devices go offline/online and alerts accordingly
 # Core alert system with working binary YAML generator
 
 script:
@@ -98,9 +98,11 @@ script:
       message:
         description: "Alert message"
         required: true
+        example: "Water leak detected in basement"
       chat_id:
         description: "Specific chat ID (optional)"
         required: false
+        example: "-1001234567890"
     sequence:
       - action: script.send_alert
         data:
@@ -117,6 +119,7 @@ script:
       message:
         description: "System alert message"
         required: true
+        example: "High CPU usage detected"
       level:
         description: "Alert level"
         default: "warning"
@@ -126,6 +129,7 @@ script:
       chat_id:
         description: "Specific chat ID (optional)"
         required: false
+        example: "-1001234567890"
     sequence:
       - action: script.send_alert
         data:
@@ -143,12 +147,15 @@ script:
       message:
         description: "Security alert message"
         required: true
+        example: "Motion detected at front door"
       location:
         description: "Location of security event"
         required: false
+        example: "Front Door"
       chat_id:
         description: "Specific chat ID (optional)"
         required: false
+        example: "-1001234567890"
     sequence:
       - action: script.send_alert
         data:
@@ -166,9 +173,11 @@ script:
       device_name:
         description: "Name of the device"
         required: true
+        example: "Living Room Sensor"
       message:
         description: "Device alert message"
         required: true
+        example: "Battery low"
       level:
         description: "Alert level"
         default: "info"
@@ -178,6 +187,7 @@ script:
       chat_id:
         description: "Specific chat ID (optional)"
         required: false
+        example: "-1001234567890"
     sequence:
       - action: script.send_alert
         data:
@@ -195,6 +205,18 @@ script:
       alerts:
         description: "List of alerts to send"
         required: true
+        example: |
+          - message: "Kitchen smoke detector activated"
+            level: "critical"
+            location: "Kitchen"
+            channel: "both"
+          - message: "Living room temperature is 28°C"
+            level: "warning"
+            location: "Living Room"
+            channel: "main"
+          - message: "Backup completed successfully"
+            level: "info"
+            channel: "technical"
     sequence:
       - repeat:
           for_each: "{{ alerts }}"
@@ -214,12 +236,14 @@ script:
       message:
         description: "Technical alert message"
         required: true
+        example: "Sensor battery low"
       level:
         description: "Alert level"
         default: "info"
       location:
         description: "Location (optional)"
         required: false
+        example: "Living Room"
     sequence:
       - action: script.send_alert
         data:
@@ -236,12 +260,14 @@ script:
       message:
         description: "Main alert message"
         required: true
+        example: "Water leak detected in basement"
       level:
         description: "Alert level"
         default: "info"
       location:
         description: "Location (optional)"
         required: false
+        example: "Basement"
     sequence:
       - action: script.send_alert
         data:
