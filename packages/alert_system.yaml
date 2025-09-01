@@ -1,11 +1,11 @@
 # packages/alert_system.yaml
-# Version: 5.1.1 - identifies when devices go offline/online and alerts accordingly
+# Version: 5.2.1 - identifies when devices go offline/online and alerts accordingly
 # Core alert system with working binary YAML generator
 
-script:
   # ===================================
   # CORE ALERT SYSTEM SCRIPTS
   # ===================================
+script:
 
   send_alert:
     alias: "Send Alert"
@@ -844,3 +844,60 @@ automation:
                             level: warning
                             channel: "{{ states('input_select.threshold_alert_channel') }}"
                             location: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
+
+  - alias: Saturday Morning Status Report Example
+    id: status_report_template
+    description: >-
+      Send weekly status report every Saturday at 10am using bulk alerts with real
+      sensor data
+    triggers:
+      - at: "11:00:00"
+        trigger: time
+        weekday:
+          - sat
+    conditions: []
+    actions:
+      - data:
+          alerts:
+            - message: 🌅 Saturday Morning Report - {{ now().strftime('%B %d, %Y') }}
+              level: info
+              channel: main
+            - message: >-
+                Current {{ state_attr('sensor.temperature', 'friendly_name') or
+                'Temperature' }}: {{ states('sensor.temperature') }}{{
+                state_attr('sensor.temperature', 'unit_of_measurement') or '°C' }}
+              level: info
+              location: Climate
+              channel: main
+            - message: >-
+                Current {{ state_attr('sensor.humidity', 'friendly_name') or
+                'Humidity' }}: {{ states('sensor.humidity') }}{{
+                state_attr('sensor.humidity', 'unit_of_measurement') or '%' }}
+              level: "{{ 'warning' if states('sensor.humidity')|float > 70 else 'info' }}"
+              location: Climate
+              channel: main
+            - message: >-
+                {{ state_attr('sensor.uptime', 'friendly_name') or 'System' }}
+                uptime: {{ states('sensor.uptime') }} days
+              level: info
+              location: System
+              channel: technical
+            - message: >-
+                Yesterday's energy usage: {{ state_attr('sensor.energy_daily',
+                'friendly_name') or 'Energy Monitor' }} - {{
+                states('sensor.energy_daily') }}{{ state_attr('sensor.energy_daily',
+                'unit_of_measurement') or ' kWh' }}
+              level: >-
+                {{ 'warning' if states('sensor.energy_daily')|float > 50 else 'info'
+                }}
+              location: Energy Monitor
+              channel: main
+            - message: Have a great Saturday! ☕
+              level: info
+              channel: main
+        action: script.bulk_alert
+    mode: single
+
+# ===================================
+# END OF ALERT SYSTEM PACKAGE
+# ===================================
