@@ -166,11 +166,11 @@ views:
               - show_name: true
                 show_icon: true
                 type: button
-                name: 🔨 Generate YAML
-                icon: mdi:code-braces
+                name: 🔍 Validate Form
+                icon: mdi:check-circle
                 tap_action:
-                  action: perform-action
-                  perform_action: script.generate_binary_automation_yaml
+                  action: call-service
+                  service: script.validate_binary_automation_form
                   target: {}
               - type: button
                 name: 🔄 Clear Form
@@ -237,19 +237,22 @@ views:
 
               ### How to use
 
-              1. **Select and copy** the YAML code above.
+              1. **Fill in the form** above with your binary sensor details.
 
-              2. Go to **Settings → Automations & Scenes**.
+              2. **Click "🔍 Validate Form"** to check for errors.
 
-              3. Click **Create Automation** → **Create new automation**.
+              3. **Copy the YAML code** above once validation passes.
 
-              4. Click the **⋮** menu → **Edit in YAML**.
+              4. Go to **Settings → Automations & Scenes**.
 
-              5. **Paste the YAML** and **Save** your automation.
+              5. Click **Create Automation** → **Create new automation**.
+
+              6. Click the **⋮** menu → **Edit in YAML**.
+
+              7. **Paste the YAML** and **Save** your automation.
 
 
-              > 🔍 Fill in the fields above and click **Generate** to update the YAML
-              here.
+              > 🔍 The YAML code updates automatically as you fill the form above.
 
 
               **Required fields**
@@ -284,16 +287,16 @@ views:
               1. **Go to Developer Tools → States**
               2. **Filter by "binary_sensor."** to find sensors
               3. **Copy entity ID** (like `binary_sensor.front_door`)
-              4. **Paste into Entity ID** field
+              4. **Paste into Binary Sensor** field
               5. **Configure settings** (trigger state, message, etc.)
-              6. **Click "Generate"** to create the YAML
-              7. **Copy & paste** into a new automation
+              6. **Click "🔍 Validate Form"** to check for errors
+              7. **Copy & paste** the generated YAML into a new automation
 
               ### Settings Explained:
               - **Trigger State**: When to send the alert
                 - **ON** = Active state (door opens, motion detected, etc.)  
                 - **OFF** = Inactive state (door closes, motion stops, etc.)
-                - **UNAVAILABLE** = Connection lost or device offline
+                - **Device Offline** = Connection lost or device offline
               - **Alert Level**: info (blue ℹ️), warning (yellow ⚠️), critical (red 🚨)
               - **Channel**: Where to send the alert (main/technical/both)
               - **Location**: Optional room/area information
@@ -307,4 +310,4 @@ views:
               ### Examples:
               - **Door Opens**: State=ON, Message="Front door opened"
               - **Motion Stops**: State=OFF, Message="Living room motion cleared"  
-              - **Device Offline**: State=UNAVAILABLE, Message="Smoke detector offline!"
+              - **Device Offline**: State=Device Offline, Message="Smoke detector offline!"
