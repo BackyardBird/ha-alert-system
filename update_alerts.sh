@@ -1,15 +1,14 @@
 #!/bin/bash
 # Home Assistant Alert System Updater
-# Updates the alert system package from GitHub
+# Updates the alert system package + dashboard file from GitHub
 
 echo "🔄 Updating Home Assistant Alert System..."
 
-# Navigate to packages directory
+########################
+# Update alert_system.yaml (in packages)
+########################
 cd /config/packages/ || exit 1
 
-########################
-# Update alert_system.yaml
-########################
 if [ -f "alert_system.yaml" ]; then
     cp alert_system.yaml alert_system.yaml.backup.$(date +%Y%m%d_%H%M%S)
     echo "✅ Backed up current alert_system.yaml"
@@ -28,8 +27,10 @@ else
 fi
 
 ########################
-# Update alert_system_dash.yaml
+# Update alert_system_dash.yaml (in lovelace)
 ########################
+cd /config/lovelace/ || exit 1
+
 if [ -f "alert_system_dash.yaml" ]; then
     cp alert_system_dash.yaml alert_system_dash.yaml.backup.$(date +%Y%m%d_%H%M%S)
     echo "✅ Backed up current alert_system_dash.yaml"
@@ -55,4 +56,3 @@ echo ""
 echo "📋 Recent changes:"
 echo "   - Check your GitHub repository for latest commits"
 echo "   - Remember to test all alert types after restart"
-
