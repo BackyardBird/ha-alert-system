@@ -1,5 +1,5 @@
 # packages/alert_system.yaml
-# Version: 5.3.0 - added validator for binarya sensor alerts 
+# Version: 5.4.0 - added validator for binarya sensor alerts 
 # Core alert system with working binary YAML generator
 
   # ===================================
