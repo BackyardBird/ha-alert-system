@@ -36,7 +36,7 @@ if [ -f "alert_system_dash.yaml" ]; then
 fi
 
 echo "📥 Downloading latest alert_system_dash.yaml from GitHub..."
-wget -O alert_system_dash.yaml.tmp https://raw.githubusercontent.com/BackyardBird/ha-alert-system/main/packages/alert_system_dash.yaml
+wget -O alert_system_dash.yaml.tmp https://raw.githubusercontent.com/BackyardBird/ha-alert-system/main/lovelace/alert_system_dash.yaml
 
 if [ $? -eq 0 ]; then
     mv alert_system_dash.yaml.tmp alert_system_dash.yaml
