@@ -1,5 +1,5 @@
 # packages/alert_system.yaml
-# Version: 5.4.1 - added validator for binarya sensor alerts 
+# Version: 5.4.2 - added complex automation example
 # Core alert system with working binary YAML generator
 
   # ===================================
@@ -882,6 +882,7 @@ template:
 # AUTOMATIONS
 # ===================================
 
+automation:
   - alias: "Threshold Alert Monitor"
     id: "threshold_alert_monitor"
     description: "Monitor entities for threshold breaches with device availability alerts and auto-location"
