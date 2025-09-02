@@ -9,7 +9,7 @@ script:
 
   send_alert:
     alias: "Send Alert"
-    description: "Send a formatted alert via Telegram"
+    description: "Send a formatted alert via Telegram with automatic location detection"
     fields:
       message:
         description: "Alert message content"
@@ -20,8 +20,12 @@ script:
         example: "warning"
         default: "info"
       location:
-        description: "Location/room where alert originated"
+        description: "Location/room where alert originated (optional - will auto-detect from entity_id if empty)"
         example: "Kitchen"
+        required: false
+      entity_id:
+        description: "Entity ID for automatic location detection (optional)"
+        example: "sensor.kitchen_temperature"
         required: false
       include_timestamp:
         description: "Include timestamp in message"
@@ -42,6 +46,15 @@ script:
           timestamp: "{% if include_timestamp | default(true) %}{{ now().strftime('%H:%M') }}{% endif %}"
           main_chat: !secret telegram_main_alerts
           tech_chat: !secret telegram_technical_alerts
+          # Auto-detect location from entity area if location not manually provided
+          final_location: >
+            {% if location and location != '' %}
+              {{ location }}
+            {% elif entity_id is defined and entity_id != '' %}
+              {{ area_name(entity_id) or '' }}
+            {% else %}
+              {{ '' }}
+            {% endif %}
       - choose:
           - conditions:
               - condition: template
@@ -50,7 +63,7 @@ script:
               - action: telegram_bot.send_message
                 data:
                   target: "{{ chat_id | int }}"
-                  message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if location %}\n📍 {{ location | e }}{% endif %}"
+                  message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if final_location %}\n📍 {{ final_location | e }}{% endif %}"
                   parse_mode: "HTML"
           - conditions:
               - condition: template
@@ -59,7 +72,7 @@ script:
               - action: telegram_bot.send_message
                 data:
                   target: "{{ main_chat | int }}"
-                  message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if location %}\n📍 {{ location | e }}{% endif %}"
+                  message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if final_location %}\n📍 {{ final_location | e }}{% endif %}"
                   parse_mode: "HTML"
           - conditions:
               - condition: template
@@ -68,7 +81,7 @@ script:
               - action: telegram_bot.send_message
                 data:
                   target: "{{ tech_chat | int }}"
-                  message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if location %}\n📍 {{ location | e }}{% endif %}"
+                  message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if final_location %}\n📍 {{ final_location | e }}{% endif %}"
                   parse_mode: "HTML"
           - conditions:
               - condition: template
@@ -77,18 +90,18 @@ script:
               - action: telegram_bot.send_message
                 data:
                   target: "{{ main_chat | int }}"
-                  message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if location %}\n📍 {{ location | e }}{% endif %}"
+                  message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if final_location %}\n📍 {{ final_location | e }}{% endif %}"
                   parse_mode: "HTML"
               - action: telegram_bot.send_message
                 data:
                   target: "{{ tech_chat | int }}"
-                  message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if location %}\n📍 {{ location | e }}{% endif %}"
+                  message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if final_location %}\n📍 {{ final_location | e }}{% endif %}"
                   parse_mode: "HTML"
         default:
           - action: telegram_bot.send_message
             data:
               target: "{{ tech_chat | int }}"
-              message: "<b>⚠️ {{ house_name|upper }} WARNING</b> {{ timestamp }}\n🚨 ALERT SYSTEM: Invalid channel '{{ channel }}' specified. Message sent to technical channel as fallback.\n\nOriginal message: {{ message | e }}{% if location %}\n📍 {{ location | e }}{% endif %}"
+              message: "<b>⚠️ {{ house_name|upper }} WARNING</b> {{ timestamp }}\n🚨 ALERT SYSTEM: Invalid channel '{{ channel }}' specified. Message sent to technical channel as fallback.\n\nOriginal message: {{ message | e }}{% if final_location %}\n📍 {{ final_location | e }}{% endif %}"
               parse_mode: "HTML"
 
   quick_alert:
@@ -142,16 +155,20 @@ script:
 
   security_alert:
     alias: "Security Alert"
-    description: "Send a security alert to both channels"
+    description: "Send a security alert to both channels with automatic location detection"
     fields:
       message:
         description: "Security alert message"
         required: true
-        example: "Motion detected at front door"
+        example: "Motion detected when house is empty"
       location:
-        description: "Location of security event"
+        description: "Location of security event (optional - will auto-detect from entity_id if empty)"
         required: false
         example: "Front Door"
+      entity_id:
+        description: "Entity ID for automatic location detection (optional)"
+        example: "binary_sensor.front_door_motion"
+        required: false
       chat_id:
         description: "Specific chat ID (optional)"
         required: false
@@ -162,41 +179,46 @@ script:
           message: "🔒 SECURITY: {{ message }}"
           level: "critical"
           location: "{{ location | default('') }}"
+          entity_id: "{{ entity_id | default('') }}"
           channel: "both"
           chat_id: "{{ chat_id | default('') }}"
           include_timestamp: true
 
   device_alert:
-    alias: "Device Alert"
-    description: "Send a device-related alert to technical channel"
-    fields:
-      device_name:
-        description: "Name of the device"
-        required: true
-        example: "Living Room Sensor"
-      message:
-        description: "Device alert message"
-        required: true
-        example: "Battery low"
-      level:
-        description: "Alert level"
-        default: "info"
-      channel:
-        description: "Alert channel (main/technical/both)"
-        default: "technical"
-      chat_id:
-        description: "Specific chat ID (optional)"
-        required: false
-        example: "-1001234567890"
-    sequence:
-      - action: script.send_alert
-        data:
-          message: "{{ device_name }}: {{ message }}"
-          level: "{{ level | default('info') }}"
-          channel: "{{ channel | default('technical') }}"
-          chat_id: "{{ chat_id | default('') }}"
-          location: ""
-          include_timestamp: true
+      alias: "Device Alert"
+      description: "Send a device-related alert to technical channel with automatic location detection"
+      fields:
+        device_name:
+          description: "Name of the device"
+          required: true
+          example: "Living Room Sensor"
+        message:
+          description: "Device alert message"
+          required: true
+          example: "Battery low"
+        entity_id:
+          description: "Entity ID for automatic location detection (optional)"
+          example: "sensor.living_room_temperature"
+          required: false
+        level:
+          description: "Alert level"
+          default: "info"
+        channel:
+          description: "Alert channel (main/technical/both)"
+          default: "technical"
+        chat_id:
+          description: "Specific chat ID (optional)"
+          required: false
+          example: "-1001234567890"
+      sequence:
+        - action: script.send_alert
+          data:
+            message: "{{ device_name }}: {{ message }}"
+            level: "{{ level | default('info') }}"
+            channel: "{{ channel | default('technical') }}"
+            entity_id: "{{ entity_id | default('') }}"
+            chat_id: "{{ chat_id | default('') }}"
+            include_timestamp: true
 
   bulk_alert:
     alias: "Bulk Alert"
@@ -237,6 +259,10 @@ script:
         description: "Technical alert message"
         required: true
         example: "Sensor battery low"
+      entity_id:
+        description: "Entity ID for automatic location detection (optional)"
+        example: "sensor.living_room_temperature"
+        required: false
       level:
         description: "Alert level"
         default: "info"
@@ -250,6 +276,7 @@ script:
           message: "{{ message }}"
           level: "{{ level | default('info') }}"
           location: "{{ location | default('') }}"
+          entity_id: "{{ entity_id | default('') }}"
           channel: "technical"
           include_timestamp: true
 
@@ -261,6 +288,10 @@ script:
         description: "Main alert message"
         required: true
         example: "Water leak detected in basement"
+      entity_id:
+        description: "Entity ID for automatic location detection (optional)"
+        example: "binary_sensor.basement_water_sensor"
+        required: false
       level:
         description: "Alert level"
         default: "info"
@@ -274,6 +305,7 @@ script:
           message: "{{ message }}"
           level: "{{ level | default('info') }}"
           location: "{{ location | default('') }}"
+          entity_id: "{{ entity_id | default('') }}"
           channel: "main"
           include_timestamp: true
 
@@ -850,10 +882,9 @@ template:
 # AUTOMATIONS
 # ===================================
 
-automation:
   - alias: "Threshold Alert Monitor"
     id: "threshold_alert_monitor"
-    description: "Monitor entities for threshold breaches with device availability alerts"
+    description: "Monitor entities for threshold breaches with device availability alerts and auto-location"
     trigger:
       - trigger: event
         event_type: state_changed
@@ -893,7 +924,7 @@ automation:
               message: "📵 DEVICE OFFLINE: {{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }} is now {{ new_state }}"
               level: "warning"
               channel: "technical"
-              location: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
+              entity_id: "{{ triggered_entity }}"
       
       # Handle device coming back online
       - if:
@@ -909,7 +940,7 @@ automation:
               message: "📶 DEVICE ONLINE: {{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }} is back online ({{ current_clean }}{{ unit_text }})"
               level: "info"
               channel: "technical"
-              location: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
+              entity_id: "{{ triggered_entity }}"
       
       # Process threshold logic only if both states are numeric
       - if:
@@ -945,7 +976,7 @@ automation:
                             message: "🚨 {{ alert_message }} - Current: {{ current_clean }}{{ unit_text }} - Threshold: {{ condition_type }} {{ threshold_clean }}{{ unit_text }}"
                             level: warning
                             channel: "{{ states('input_select.threshold_alert_channel') }}"
-                            location: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
+                            entity_id: "{{ triggered_entity }}"
 
   - alias: Saturday Morning Status Report Example
     id: status_report_template
