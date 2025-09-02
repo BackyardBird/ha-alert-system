@@ -1,5 +1,5 @@
 # packages/alert_system.yaml
-# Version: 5.2.1 - identifies when devices go offline/online and alerts accordingly
+# Version: 5.3.0 - added validator for binarya sensor alerts 
 # Core alert system with working binary YAML generator
 
   # ===================================
@@ -564,6 +564,108 @@ script:
           level: info
           channel: "{{ states('input_select.threshold_alert_channel') }}"
           location: "Test System"
+
+  validate_binary_automation_form:
+    alias: "Validate Binary Automation Form"
+    description: "Validate the binary sensor automation form inputs"
+    sequence:
+      - variables:
+          entity_id: "{{ states('input_text.binary_automation_entity') | trim }}"
+          message: "{{ states('input_text.binary_automation_message') | trim }}"
+          trigger_state: "{{ states('input_select.binary_automation_trigger_state') }}"
+          level: "{{ states('input_select.binary_automation_level') }}"
+          channel: "{{ states('input_select.binary_automation_channel') }}"
+          location: "{{ states('input_text.binary_automation_location') | trim }}"
+      
+      # Comprehensive validation checks
+      - choose:
+          # Check if entity ID is empty
+          - conditions:
+              - condition: template
+                value_template: "{{ entity_id == '' or entity_id == 'unavailable' or entity_id == 'unknown' }}"
+            sequence:
+              - action: script.tech_alert
+                data:
+                  message: "❌ VALIDATION ERROR: Please enter a binary sensor entity ID"
+                  level: "warning"
+          
+          # Check if entity ID has correct format
+          - conditions:
+              - condition: template
+                value_template: "{{ '.' not in entity_id }}"
+            sequence:
+              - action: script.tech_alert
+                data:
+                  message: "❌ VALIDATION ERROR: Entity ID must contain a dot (example: binary_sensor.front_door)"
+                  level: "warning"
+          
+          # Check if it's a binary sensor (not regular sensor)
+          - conditions:
+              - condition: template
+                value_template: "{{ not entity_id.startswith('binary_sensor.') }}"
+            sequence:
+              - action: script.tech_alert
+                data:
+                  message: "⚠️ VALIDATION WARNING: Entity should start with 'binary_sensor.' not 'sensor.' - Use {{ entity_id.replace('sensor.', 'binary_sensor.') if entity_id.startswith('sensor.') else 'binary_sensor.' + entity_id.split('.')[-1] }}"
+                  level: "warning"
+          
+          # Check if entity exists in Home Assistant
+          - conditions:
+              - condition: template
+                value_template: "{{ states(entity_id) in ['unknown'] }}"
+            sequence:
+              - action: script.tech_alert
+                data:
+                  message: "❌ VALIDATION ERROR: Entity '{{ entity_id }}' not found in Home Assistant. Check Developer Tools → States to verify the correct entity ID."
+                  level: "warning"
+          
+          # Check if message is empty
+          - conditions:
+              - condition: template
+                value_template: "{{ message == '' or message == 'unavailable' or message == 'unknown' }}"
+            sequence:
+              - action: script.tech_alert
+                data:
+                  message: "❌ VALIDATION ERROR: Please enter an alert message"
+                  level: "warning"
+          
+          # Entity exists but is currently unavailable (warn but allow)
+          - conditions:
+              - condition: template
+                value_template: "{{ states(entity_id) in ['unavailable'] }}"
+            sequence:
+              - action: script.tech_alert
+                data:
+                  message: "⚠️ VALIDATION WARNING: Entity '{{ entity_id }}' exists but is currently unavailable. The automation will still be created but may not work until the device comes online."
+                  level: "info"
+                  
+        # All validations passed - success message
+        default:
+          - variables:
+              entity_name: "{{ state_attr(entity_id, 'friendly_name') or entity_id.split('.')[1] | replace('_', ' ') | title }}"
+              current_state: "{{ states(entity_id) }}"
+              location_text: "{% if location %}{{ location }}{% else %}No location specified{% endif %}"
+          - action: script.tech_alert
+            data:
+              message: |
+                ✅ VALIDATION SUCCESS: Binary automation form is valid!
+                
+                📋 Configuration Summary:
+                • Entity: {{ entity_name }} ({{ entity_id }})
+                • Current State: {{ current_state }}
+                • Trigger: When state changes to "{{ trigger_state }}"
+                • Alert Level: {{ level }}
+                • Channel: {{ channel }}
+                • Location: {{ location_text }}
+                • Message: "{{ message }}"
+                
+                🎯 Next Steps:
+                1. Copy the generated YAML code below the form
+                2. Go to Settings → Automations & Scenes → Create Automation
+                3. Click the ⋮ menu → Edit in YAML
+                4. Paste the code and save your automation
+              level: "info"
+
 # ===================================
 # BINARY SENSOR AUTOMATION GENERATOR
 # ===================================
