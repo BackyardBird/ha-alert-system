@@ -225,3 +225,102 @@ data:
   # Missing message field
   level: "info"
 # Expected: Should show error or handle gracefully
+
+# ===== PHASE 9: AUTOMATIC LOCATION DETECTION TESTING =====
+
+# Test 26: Auto-Location Detection - Entity with Area
+action: script.send_alert
+data:
+  message: "Testing auto-location from entity area"
+  level: "info"
+  channel: "both"
+  entity_id: "sensor.living_room_temperature"  # Replace with real entity assigned to area
+# Expected: Location line shows entity's Home Assistant area assignment
+
+# Test 27: Manual Location Override - Should Take Priority
+action: script.send_alert
+data:
+  message: "Testing manual location override"
+  level: "info"
+  channel: "both"
+  entity_id: "sensor.living_room_temperature"
+  location: "Custom Override Location"
+# Expected: Location shows "Custom Override Location", not auto-detected area
+
+# Test 28: Entity Without Area Assignment
+action: script.send_alert
+data:
+  message: "Testing entity without area assignment"
+  level: "info"
+  channel: "both"
+  entity_id: "sensor.uptime"  # Replace with entity not assigned to area
+# Expected: No location line shown, no errors
+
+# Test 29: Invalid Entity ID - Graceful Handling
+action: script.send_alert
+data:
+  message: "Testing invalid entity ID handling"
+  level: "info"
+  channel: "both"
+  entity_id: "sensor.nonexistent_sensor"
+# Expected: No location line, no errors, message sent normally
+
+# Test 30: Tech Alert with Auto-Location
+action: script.tech_alert
+data:
+  message: "Tech alert with automatic location"
+  level: "warning"
+  entity_id: "sensor.cpu_temperature"  # Replace with real entity
+# Expected: Message ONLY in technical channel with auto-detected location
+
+# Test 31: Main Alert with Auto-Location
+action: script.main_alert
+data:
+  message: "Main alert with automatic location"
+  level: "info"
+  entity_id: "binary_sensor.front_door"  # Replace with real entity
+# Expected: Message ONLY in main channel with auto-detected location
+
+# Test 32: Security Alert with Auto-Location
+action: script.security_alert
+data:
+  message: "Security event with automatic location"
+  entity_id: "binary_sensor.living_room_motion"  # Replace with real entity
+# Expected: Message in BOTH channels with 🔒 prefix and auto-detected location
+
+# Test 33: Device Alert with Auto-Location
+action: script.device_alert
+data:
+  device_name: "Temperature Sensor"
+  message: "reading seems high"
+  level: "warning"
+  entity_id: "sensor.bedroom_temperature"  # Replace with real entity
+# Expected: Message in technical channel with auto-detected location
+
+# Test 34: Empty Entity ID - Should Not Break
+action: script.send_alert
+data:
+  message: "Testing empty entity_id parameter"
+  level: "info"
+  channel: "both"
+  entity_id: ""
+# Expected: No location line, no errors, message sent normally
+
+# Test 35: Threshold Alert Auto-Location (Trigger Existing Threshold)
+# This test requires a configured threshold alert to actually trigger
+# Manually change a sensor value to cross a configured threshold
+# Expected: Alert message includes auto-detected location from triggered entity
+
+# ===== VERIFICATION CHECKLIST FOR AUTO-LOCATION =====
+
+# ✅ Auto-location works when entity has area assignment
+# ✅ Manual location always overrides auto-detected location  
+# ✅ No errors when entity has no area assignment
+# ✅ No errors when entity_id is invalid or empty
+# ✅ All alert scripts properly pass entity_id to send_alert
+# ✅ Threshold automation includes entity context in alerts
+# ✅ Location format is consistent: "📍 Area Name"
+# ✅ HTML escaping works correctly for area names with special characters
+
+# NOTE: Replace example entity IDs with actual entities from your Home Assistant setup
+# that are assigned to areas for proper testing of the auto-location feature.
