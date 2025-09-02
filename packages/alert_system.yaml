@@ -1031,6 +1031,130 @@ template:
         action: script.bulk_alert
     mode: single
 
+  - alias: "Complex Threshold Alert with Auto-Location Example"
+    description: "Advanced threshold alert with friendly names, values, units, and automatic location detection"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.living_room_temperature  # Replace with your sensor
+        above: 25  # Replace with your threshold value
+        for: "00:02:00"  # Optional: Wait 2 minutes before alerting (prevents flapping)
+      - platform: numeric_state
+        entity_id: sensor.bedroom_humidity  # Replace with your sensor  
+        above: 70  # Replace with your threshold value
+        for: "00:05:00"  # Optional: Wait 5 minutes before alerting
+      - platform: numeric_state
+        entity_id: sensor.basement_temperature  # Replace with your sensor
+        below: 15  # Replace with your threshold value
+        for: "00:01:00"  # Optional: Wait 1 minute before alerting
+    condition:
+      # Optional: Only alert during certain times or conditions
+      - condition: time
+        after: "06:00:00"
+        before: "23:00:00"
+      # Optional: Only alert when someone is home
+      # - condition: state
+      #   entity_id: group.all_people
+      #   state: "home"
+    action:
+      - variables:
+          # Entity information
+          triggered_entity: "{{ trigger.entity_id }}"
+          entity_friendly_name: "{{ state_attr(trigger.entity_id, 'friendly_name') or trigger.entity_id.split('.')[1] | replace('_', ' ') | title }}"
+          
+          # Current state and formatting
+          current_state: "{{ trigger.to_state.state }}"
+          previous_state: "{{ trigger.from_state.state }}"
+          unit_of_measurement: "{{ state_attr(trigger.entity_id, 'unit_of_measurement') }}"
+          unit_text: "{% if unit_of_measurement %}{{ unit_of_measurement }}{% else %}{% endif %}"
+          
+          # Format numbers nicely (remove unnecessary decimals)
+          current_value_clean: "{% if current_state | float == current_state | float | int %}{{ current_state | float | int }}{% else %}{{ current_state | float | round(1) }}{% endif %}"
+          previous_value_clean: "{% if previous_state | float == previous_state | float | int %}{{ previous_state | float | int }}{% else %}{{ previous_state | float | round(1) }}{% endif %}"
+          
+          # Determine threshold information based on trigger
+          threshold_value: >
+            {% if trigger.platform == 'numeric_state' and trigger.above is defined %}
+              {{ trigger.above }}
+            {% elif trigger.platform == 'numeric_state' and trigger.below is defined %}
+              {{ trigger.below }}
+            {% else %}
+              Unknown
+            {% endif %}
+          
+          threshold_condition: >
+            {% if trigger.platform == 'numeric_state' and trigger.above is defined %}
+              above
+            {% elif trigger.platform == 'numeric_state' and trigger.below is defined %}
+              below
+            {% else %}
+              unknown condition
+            {% endif %}
+          
+          threshold_clean: "{% if threshold_value != 'Unknown' and threshold_value | float == threshold_value | float | int %}{{ threshold_value | float | int }}{% else %}{{ threshold_value | float | round(1) if threshold_value != 'Unknown' else 'Unknown' }}{% endif %}"
+          
+          # Determine alert level based on how far from threshold
+          threshold_difference: "{{ (current_state | float - threshold_value | float) | abs if threshold_value != 'Unknown' else 0 }}"
+          alert_level: >
+            {% if threshold_difference | float > (threshold_value | float * 0.2) %}
+              critical
+            {% elif threshold_difference | float > (threshold_value | float * 0.1) %}
+              warning
+            {% else %}
+              info
+            {% endif %}
+          
+          # Create rich alert message
+          alert_message: >
+            🌡️ THRESHOLD ALERT: {{ entity_friendly_name }}
+            
+            📊 Current: {{ current_value_clean }}{{ unit_text }} (was {{ previous_value_clean }}{{ unit_text }})
+            ⚠️ Threshold: {{ threshold_condition }} {{ threshold_clean }}{{ unit_text }}
+            📈 Change: {{ ((current_state | float - previous_state | float) | round(1)) }}{{ unit_text }}
+            {% if threshold_difference | float > 0 %}
+            🚨 Exceeded by: {{ threshold_difference | round(1) }}{{ unit_text }}
+            {% endif %}
+          
+          # Determine appropriate channel based on severity
+          alert_channel: >
+            {% if alert_level == 'critical' %}
+              both
+            {% elif triggered_entity.startswith('sensor.') and 'temperature' in triggered_entity %}
+              main
+            {% else %}
+              technical
+            {% endif %}
+      
+      - action: script.send_alert
+        data:
+          message: "{{ alert_message }}"
+          level: "{{ alert_level }}"
+          channel: "{{ alert_channel }}"
+          entity_id: "{{ triggered_entity }}"  # Auto-location will be determined from this
+          include_timestamp: true
+
+      # Optional: Send additional notification for critical alerts
+      - if:
+          - condition: template
+            value_template: "{{ alert_level == 'critical' }}"
+        then:
+          - delay:
+              seconds: 30
+          - action: script.send_alert
+            data:
+              message: "🚨 CRITICAL FOLLOW-UP: {{ entity_friendly_name }} remains at {{ current_value_clean }}{{ unit_text }} (threshold: {{ threshold_condition }} {{ threshold_clean }}{{ unit_text }})"
+              level: "critical"
+              channel: "both"
+              entity_id: "{{ triggered_entity }}"
+
+      # Optional: Log detailed information for troubleshooting
+      - action: system_log.write
+        data:
+          message: "Threshold alert triggered: {{ entity_friendly_name }} = {{ current_value_clean }}{{ unit_text }}, threshold = {{ threshold_condition }} {{ threshold_clean }}{{ unit_text }}, location = {{ area_name(triggered_entity) or 'No area assigned' }}"
+          level: warning
+
+    mode: single  # Prevent multiple instances of same automation
+    max_exceeded: silent  # Don't log if automation is already running
+
 # ===================================
 # END OF ALERT SYSTEM PACKAGE
 # ===================================
