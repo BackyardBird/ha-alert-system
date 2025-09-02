@@ -28,22 +28,22 @@ else
 fi
 
 ########################
-# Update alert_system-dash.yaml
+# Update alert_system_dash.yaml
 ########################
-if [ -f "alert_system-dash.yaml" ]; then
-    cp alert_system-dash.yaml alert_system-dash.yaml.backup.$(date +%Y%m%d_%H%M%S)
-    echo "✅ Backed up current alert_system-dash.yaml"
+if [ -f "alert_system_dash.yaml" ]; then
+    cp alert_system_dash.yaml alert_system_dash.yaml.backup.$(date +%Y%m%d_%H%M%S)
+    echo "✅ Backed up current alert_system_dash.yaml"
 fi
 
-echo "📥 Downloading latest alert_system-dash.yaml from GitHub..."
-wget -O alert_system-dash.yaml.tmp https://raw.githubusercontent.com/BackyardBird/ha-alert-system/main/packages/alert_system-dash.yaml
+echo "📥 Downloading latest alert_system_dash.yaml from GitHub..."
+wget -O alert_system_dash.yaml.tmp https://raw.githubusercontent.com/BackyardBird/ha-alert-system/main/packages/alert_system_dash.yaml
 
 if [ $? -eq 0 ]; then
-    mv alert_system-dash.yaml.tmp alert_system-dash.yaml
-    echo "✅ Successfully updated alert_system-dash.yaml"
+    mv alert_system_dash.yaml.tmp alert_system_dash.yaml
+    echo "✅ Successfully updated alert_system_dash.yaml"
 else
-    echo "❌ Failed to download alert_system-dash.yaml"
-    rm -f alert_system-dash.yaml.tmp
+    echo "❌ Failed to download alert_system_dash.yaml"
+    rm -f alert_system_dash.yaml.tmp
     exit 1
 fi
 
