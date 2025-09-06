@@ -110,10 +110,15 @@ views:
               - entity: input_text.temp_remove_entity
                 name: Entity ID to Remove
                 icon: mdi:target
-# Add this section to your dashboard - insert after the "Remove Alert" section
-
+          - type: button
+            tap_action:
+              action: call-service
+              service: script.remove_threshold_alert_from_form
+            name: 🗑️ Remove Alert
+            icon: mdi:delete
+            # Add this section to your dashboard - insert after the "Remove Alert" section
           - type: entities
-            title: 🔧 Advanced: Direct Storage Editing
+            title: "🔧 Advanced: Direct Storage Editing"
             show_header_toggle: false
             entities:
               - entity: input_text.threshold_entities
@@ -167,12 +172,6 @@ views:
               ❌ `sensor.temp:25:above:Hot;sensor.hum:70:above:Humid` *(semicolon instead of pipe)*
 
               ✅ `sensor.temp:25:above:Hot|sensor.hum:70:above:Humid` *(correct format)*
-          - type: button
-            tap_action:
-              action: call-service
-              service: script.remove_threshold_alert_from_form
-            name: 🗑️ Remove Alert
-            icon: mdi:delete
           - type: markdown
             content: |
               ## 📖 Enhanced Alert Configuration Guide
