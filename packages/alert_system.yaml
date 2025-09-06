@@ -1,5 +1,5 @@
 # packages/alert_system.yaml
-# Version: 5.5.0 - added offline alert delay supportß 
+# Version: 5.5.1 - added offline alert delay supportß 
 # Core alert system with working binary YAML generator
 
   # ===================================
@@ -818,17 +818,21 @@ script:
 
 input_text:
   # Threshold alert storage helpers - REMOVED initial: "" to preserve data across reboots
+  # Enhanced threshold storage helpers with multiline support
   threshold_entities:
     name: "Threshold Alert Entities"
     max: 255
-
+    mode: text          # This makes it a textarea instead of single line
+    
   threshold_entities_2:
     name: "Threshold Alert Entities (Group 2)"
     max: 255
-
+    mode: text          # This makes it a textarea instead of single line
+    
   threshold_entities_3:
     name: "Threshold Alert Entities (Group 3)"
     max: 255
+    mode: text          # This makes it a textarea instead of single line
 
   temp_offline_min:
     name: "Temporary Offline Delay (minutes)"
