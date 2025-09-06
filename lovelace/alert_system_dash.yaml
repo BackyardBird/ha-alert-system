@@ -53,7 +53,7 @@ views:
                 name: 🗑️ Clear All
                 icon: mdi:delete-sweep
           - type: entities
-            title: ➕ Create Enhanced Alert
+            title: ➕ Create Alert
             show_header_toggle: false
             entities:
               - entity: input_text.temp_threshold_entity
@@ -173,7 +173,7 @@ views:
               ✅ `sensor.temp:25:above:Hot|sensor.hum:70:above:Humid` *(correct format)*
           - type: markdown
             content: |
-              ## 📖 Enhanced Alert Configuration Guide
+              ## 📖 Alert Configuration Guide
 
               ### ⚡ Quick Setup Examples
 
@@ -206,7 +206,7 @@ views:
               **Current Global Delay:** {{ states('input_number.device_offline_delay_minutes') }} minutes
 
               #### Priority Order:
-              1. **Custom delay** (if set in enhanced alert) = Used for this device
+              1. **Custom delay** (if set in alert) = Used for this device
               2. **Global delay** (above setting) = Used as fallback
               3. **Zero delay** = Immediate offline alerts
 
@@ -225,7 +225,7 @@ views:
               4. **Set threshold** and condition (above/below)
               5. **Add custom message** (optional)
               6. **Set custom offline delay** (optional - leave blank for global)
-              7. **Click "Create Enhanced Alert"**
+              7. **Click "Create Alert"**
 
               ### Managing Alerts:
               - **List All**: See current alerts and their status
