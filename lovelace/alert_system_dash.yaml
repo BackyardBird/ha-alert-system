@@ -24,6 +24,10 @@ views:
               - entity: sensor.threshold_alert_count
                 name: Total Alerts Configured
                 icon: mdi:counter
+              - type: divider
+              - entity: input_number.device_offline_delay_minutes
+                name: Device Offline Alert Delay
+                icon: mdi:timer
           - type: horizontal-stack
             cards:
               - show_name: true
@@ -49,7 +53,7 @@ views:
                 name: 🗑️ Clear All
                 icon: mdi:delete-sweep
           - type: entities
-            title: ➕ Create Custom Alert
+            title: ➕ Create Enhanced Alert
             show_header_toggle: false
             entities:
               - entity: input_text.temp_threshold_entity
@@ -64,6 +68,10 @@ views:
               - entity: input_text.temp_threshold_message
                 name: Custom Message (Optional)
                 icon: mdi:message-text
+              - type: divider
+              - entity: input_text.temp_offline_min
+                name: "Custom Offline Delay (Optional)"
+                icon: mdi:timer
           - show_name: true
             show_icon: true
             type: button
@@ -110,7 +118,50 @@ views:
             icon: mdi:delete
           - type: markdown
             content: |
-              ## 📖 How to Use This Card
+              ## 📖 Enhanced Alert Configuration Guide
+
+              ### ⚡ Quick Setup Examples
+
+              #### 1. Standard Indoor Sensor
+              - **Entity**: `sensor.living_room_temperature`
+              - **Threshold**: `25`, **Condition**: `above`
+              - **Message**: `Living room too hot`
+              - **Offline Delay**: *(leave blank for global delay)*
+
+              #### 2. Critical Safety Device  
+              - **Entity**: `sensor.smoke_detector_battery`
+              - **Threshold**: `20`, **Condition**: `below`
+              - **Message**: `Smoke detector battery critical!`
+              - **Offline Delay**: `1` *(1-minute for critical devices)*
+
+              #### 3. Outdoor/Unreliable Device
+              - **Entity**: `sensor.garden_moisture`
+              - **Threshold**: `30`, **Condition**: `below`
+              - **Message**: `Garden needs watering`
+              - **Offline Delay**: `30` *(30-minute for outdoor devices)*
+
+              #### 4. Offline Monitoring Only
+              - **Entity**: `sensor.garage_door`
+              - **Threshold**: `0`, **Condition**: `above` *(dummy threshold)*
+              - **Message**: *(leave blank)*
+              - **Offline Delay**: `5` *(monitor offline status only)*
+
+              ### 🎯 How Device-Specific Delays Work
+
+              **Current Global Delay:** {{ states('input_number.device_offline_delay_minutes') }} minutes
+
+              #### Priority Order:
+              1. **Custom delay** (if set in enhanced alert) = Used for this device
+              2. **Global delay** (above setting) = Used as fallback
+              3. **Zero delay** = Immediate offline alerts
+
+              #### Storage Format:
+              `entity:threshold:condition:message:offline_min`
+
+              **Examples:**
+              - `sensor.temp:25:above:Hot:10` *(10-min offline delay)*
+              - `sensor.humidity:70:above:Humid` *(uses global delay)*
+              - `sensor.door:0:above::2` *(2-min delay, offline monitoring only)*
 
               ### Creating Custom Alerts:
               1. **Find your entity ID** using Developer Tools → States
@@ -118,18 +169,27 @@ views:
               3. **Paste it** into the "Entity ID" field above
               4. **Set threshold** and condition (above/below)
               5. **Add custom message** (optional)
-              6. **Click "Create Alert"**
+              6. **Set custom offline delay** (optional - leave blank for global)
+              7. **Click "Create Enhanced Alert"**
 
               ### Managing Alerts:
               - **List All**: See current alerts and their status
               - **Remove**: Enter entity_id in remove section
               - **Clear All**: Remove all configured alerts (with confirmation)
 
+              ### Smart Features:
+              ✅ **Parallel processing** - Multiple devices can have pending alerts  
+              ✅ **Auto-cancellation** - If device comes online during delay, no alert sent  
+              ✅ **Custom indication** - Alerts show "(custom delay)" when applicable  
+              ✅ **Backwards compatible** - Existing alerts work unchanged
+
               ### Tips:
               - Entity IDs look like: `sensor.bedroom_temperature`
               - You can set multiple thresholds for the same entity
               - Alerts use your configured channel (main/technical/both)
               - Test the system after adding new alerts
+              - Use longer delays (15-30 min) for outdoor/unreliable devices
+              - Use shorter delays (1-2 min) for critical indoor devices
 
       - type: vertical-stack
         cards:
@@ -166,11 +226,11 @@ views:
               - show_name: true
                 show_icon: true
                 type: button
-                name: 🔍 Validate Form
-                icon: mdi:check-circle
+                name: 🔨 Generate YAML
+                icon: mdi:code-braces
                 tap_action:
-                  action: call-service
-                  service: script.validate_binary_automation_form
+                  action: perform-action
+                  perform_action: script.generate_binary_automation_yaml
                   target: {}
               - type: button
                 name: 🔄 Clear Form
@@ -237,22 +297,19 @@ views:
 
               ### How to use
 
-              1. **Fill in the form** above with your binary sensor details.
+              1. **Select and copy** the YAML code above.
 
-              2. **Click "🔍 Validate Form"** to check for errors.
+              2. Go to **Settings → Automations & Scenes**.
 
-              3. **Copy the YAML code** above once validation passes.
+              3. Click **Create Automation** → **Create new automation**.
 
-              4. Go to **Settings → Automations & Scenes**.
+              4. Click the **⋮** menu → **Edit in YAML**.
 
-              5. Click **Create Automation** → **Create new automation**.
-
-              6. Click the **⋮** menu → **Edit in YAML**.
-
-              7. **Paste the YAML** and **Save** your automation.
+              5. **Paste the YAML** and **Save** your automation.
 
 
-              > 🔍 The YAML code updates automatically as you fill the form above.
+              > 🔍 Fill in the fields above and click **Generate** to update the YAML
+              here.
 
 
               **Required fields**
@@ -280,6 +337,37 @@ views:
               - Windows: `binary_sensor.*window*`
               - Safety: `binary_sensor.*smoke*`, `binary_sensor.*gas*`
           - type: markdown
+            content: |
+              ## 📖 How to Use This Generator
+
+              ### Quick Start:
+              1. **Go to Developer Tools → States**
+              2. **Filter by "binary_sensor."** to find sensors
+              3. **Copy entity ID** (like `binary_sensor.front_door`)
+              4. **Paste into Entity ID** field
+              5. **Configure settings** (trigger state, message, etc.)
+              6. **Click "Generate"** to create the YAML
+              7. **Copy & paste** into a new automation
+
+              ### Settings Explained:
+              - **Trigger State**: When to send the alert
+                - **ON** = Active state (door opens, motion detected, etc.)  
+                - **OFF** = Inactive state (door closes, motion stops, etc.)
+                - **UNAVAILABLE** = Connection lost or device offline
+              - **Alert Level**: info (blue ℹ️), warning (yellow ⚠️), critical (red 🚨)
+              - **Channel**: Where to send the alert (main/technical/both)
+              - **Location**: Optional room/area information
+
+              ### State Meanings by Device Type:
+              - **Doors/Windows**: ON=Opens, OFF=Closes
+              - **Motion Sensors**: ON=Motion Detected, OFF=Motion Clear  
+              - **Safety Sensors**: ON=Alert Triggered, OFF=Normal
+              - **Covers**: ON=Opens, OFF=Closes
+
+              ### Examples:
+              - **Door Opens**: State=ON, Message="Front door opened"
+              - **Motion Stops**: State=OFF, Message="Living room motion cleared"  
+              - **Device Offline**: State=UNAVAILABLE, Message="Smoke detector offline!"
             content: |
               ## 📖 How to Use This Generator
 
