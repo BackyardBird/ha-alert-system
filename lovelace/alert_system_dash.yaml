@@ -116,7 +116,6 @@ views:
               service: script.remove_threshold_alert_from_form
             name: 🗑️ Remove Alert
             icon: mdi:delete
-            # Add this section to your dashboard - insert after the "Remove Alert" section
           - type: entities
             title: "🔧 Advanced: Direct Storage Editing"
             show_header_toggle: false
@@ -400,40 +399,9 @@ views:
               1. **Go to Developer Tools → States**
               2. **Filter by "binary_sensor."** to find sensors
               3. **Copy entity ID** (like `binary_sensor.front_door`)
-              4. **Paste into Entity ID** field
-              5. **Configure settings** (trigger state, message, etc.)
-              6. **Click "Generate"** to create the YAML
-              7. **Copy & paste** into a new automation
-
-              ### Settings Explained:
-              - **Trigger State**: When to send the alert
-                - **ON** = Active state (door opens, motion detected, etc.)  
-                - **OFF** = Inactive state (door closes, motion stops, etc.)
-                - **UNAVAILABLE** = Connection lost or device offline
-              - **Alert Level**: info (blue ℹ️), warning (yellow ⚠️), critical (red 🚨)
-              - **Channel**: Where to send the alert (main/technical/both)
-              - **Location**: Optional room/area information
-
-              ### State Meanings by Device Type:
-              - **Doors/Windows**: ON=Opens, OFF=Closes
-              - **Motion Sensors**: ON=Motion Detected, OFF=Motion Clear  
-              - **Safety Sensors**: ON=Alert Triggered, OFF=Normal
-              - **Covers**: ON=Opens, OFF=Closes
-
-              ### Examples:
-              - **Door Opens**: State=ON, Message="Front door opened"
-              - **Motion Stops**: State=OFF, Message="Living room motion cleared"  
-              - **Device Offline**: State=UNAVAILABLE, Message="Smoke detector offline!"
-            content: |
-              ## 📖 How to Use This Generator
-
-              ### Quick Start:
-              1. **Go to Developer Tools → States**
-              2. **Filter by "binary_sensor."** to find sensors
-              3. **Copy entity ID** (like `binary_sensor.front_door`)
               4. **Paste into Binary Sensor** field
               5. **Configure settings** (trigger state, message, etc.)
-              6. **Click "🔍 Validate Form"** to check for errors
+              6. **Click "🔨 Generate YAML"** to update the code above
               7. **Copy & paste** the generated YAML into a new automation
 
               ### Settings Explained:
