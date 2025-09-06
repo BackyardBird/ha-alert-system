@@ -1,5 +1,5 @@
 # packages/alert_system.yaml
-# Version: 5.4.2 - added complex automation example
+# Version: 5.5.0 - added offline alert delay supportß 
 # Core alert system with working binary YAML generator
 
   # ===================================
@@ -334,7 +334,7 @@ script:
 
   add_threshold_alert:
     alias: "Add Threshold Alert"
-    description: "Add an entity to threshold monitoring"
+    description: "Add an entity to threshold monitoring with optional offline delay"
     fields:
       entity_id:
         description: "Entity to monitor"
@@ -352,12 +352,19 @@ script:
         description: "Custom alert message (optional)"
         required: false
         example: "Temperature is critical"
+      offline_min:
+        description: "Custom offline delay in minutes (optional, blank = use global)"
+        required: false
+        example: "10"
     sequence:
       - variables:
           entity_name: "{{ state_attr(entity_id, 'friendly_name') or entity_id.split('.')[1] | replace('_', ' ') | title }}"
           default_message: "{% if condition == 'above' %}{{ entity_name }} is above threshold{% else %}{{ entity_name }} is below threshold{% endif %}"
           alert_message: "{{ custom_message if custom_message else default_message }}"
-          new_entry: "{{ entity_id }}:{{ threshold }}:{{ condition }}:{{ alert_message }}"
+          # Only add delay part if offline_min is provided and valid
+          delay_part: "{% if offline_min and offline_min != '' and offline_min | int >= 0 %}:{{ offline_min }}{% endif %}"
+          new_entry: "{{ entity_id }}:{{ threshold }}:{{ condition }}:{{ alert_message }}{{ delay_part }}"
+      
       # Try to add to first available helper
       - choose:
           - conditions:
@@ -371,7 +378,7 @@ script:
                   value: "{% if states('input_text.threshold_entities') %}{{ states('input_text.threshold_entities') }}|{{ new_entry }}{% else %}{{ new_entry }}{% endif %}"
               - action: script.tech_alert
                 data:
-                  message: "Added threshold alert for {{ entity_name }}: {{ condition }} {{ threshold }}"
+                  message: "Added threshold alert for {{ entity_name }}: {{ condition }} {{ threshold }}{% if offline_min and offline_min != '' %}, offline delay: {{ offline_min }}min{% endif %}"
                   level: info
           - conditions:
               - condition: template
@@ -384,7 +391,7 @@ script:
                   value: "{% if states('input_text.threshold_entities_2') %}{{ states('input_text.threshold_entities_2') }}|{{ new_entry }}{% else %}{{ new_entry }}{% endif %}"
               - action: script.tech_alert
                 data:
-                  message: "Added threshold alert for {{ entity_name }}: {{ condition }} {{ threshold }}"
+                  message: "Added threshold alert for {{ entity_name }}: {{ condition }} {{ threshold }}{% if offline_min and offline_min != '' %}, offline delay: {{ offline_min }}min{% endif %}"
                   level: info
           - conditions:
               - condition: template
@@ -397,7 +404,7 @@ script:
                   value: "{% if states('input_text.threshold_entities_3') %}{{ states('input_text.threshold_entities_3') }}|{{ new_entry }}{% else %}{{ new_entry }}{% endif %}"
               - action: script.tech_alert
                 data:
-                  message: "Added threshold alert for {{ entity_name }}: {{ condition }} {{ threshold }}"
+                  message: "Added threshold alert for {{ entity_name }}: {{ condition }} {{ threshold }}{% if offline_min and offline_min != '' %}, offline delay: {{ offline_min }}min{% endif %}"
                   level: info
         default:
           - action: script.tech_alert
@@ -460,13 +467,15 @@ script:
 
   create_threshold_alert_from_form:
     alias: "Create Threshold Alert from Form"
-    description: "Create threshold alert using the card form inputs with improved validation"
+    description: "Create threshold alert using the card form inputs with enhanced validation and offline delay support"
     sequence:
       - variables:
           entity_id: "{{ states('input_text.temp_threshold_entity') }}"
           threshold: "{{ states('input_text.temp_threshold_value') }}"
           condition: "{{ states('input_select.temp_threshold_condition') }}"
           message: "{{ states('input_text.temp_threshold_message') }}"
+          offline_delay: "{{ states('input_text.temp_offline_min') }}"
+      
       # Simple validation
       - choose:
           - conditions:
@@ -501,6 +510,8 @@ script:
               threshold: "{{ threshold }}"
               condition: "{{ condition }}"
               custom_message: "{{ message if message != '' else '' }}"
+              offline_min: "{{ offline_delay if offline_delay != '' and offline_delay | int >= 0 else '' }}"
+          
           # Clear the form after successful creation
           - action: input_text.set_value
             target:
@@ -517,6 +528,11 @@ script:
               entity_id: input_text.temp_threshold_value
             data:
               value: "20"
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.temp_offline_min
+            data:
+              value: ""
 
   remove_threshold_alert_from_form:
     alias: "Remove Threshold Alert from Form"
@@ -543,19 +559,22 @@ script:
               level: warning
 
   list_threshold_alerts:
-    alias: "List Threshold Alerts"
-    description: "Show all configured threshold alerts"
+    alias: "List Enhanced Threshold Alerts"
+    description: "Show all threshold alerts with offline delay information"
     sequence:
       - action: script.tech_alert
         data:
           message: |
-            📊 THRESHOLD ALERTS STATUS
+            📊 ENHANCED THRESHOLD ALERTS
+
+            Global offline delay: {{ states('input_number.device_offline_delay_minutes') }} minutes
 
             Helper 1: {{ states('input_text.threshold_entities') or 'Empty' }}
-            Helper 2: {{ states('input_text.threshold_entities_2') or 'Empty' }}
+            Helper 2: {{ states('input_text.threshold_entities_2') or 'Empty' }}  
             Helper 3: {{ states('input_text.threshold_entities_3') or 'Empty' }}
 
-            Format: entity_id:threshold:condition:message
+            Format: entity:threshold:condition:message:offline_min
+            (offline_min is optional - blank means use global)
           level: info
 
   clear_all_threshold_alerts:
@@ -698,6 +717,47 @@ script:
                 4. Paste the code and save your automation
               level: "info"
 
+  delayed_offline_alert:
+    alias: "Delayed Offline Alert"
+    description: "Send offline alert after delay if device is still offline"
+    fields:
+      entity_id:
+        description: "Entity that went offline"
+        required: true
+      initial_state:
+        description: "State when device went offline"
+        required: true
+      delay_minutes:
+        description: "Minutes to wait (optional - uses global if not specified)"
+        required: false
+    mode: parallel
+    max: 50
+    sequence:
+      - variables:
+          # Use passed delay or fall back to global setting
+          final_delay: "{{ delay_minutes | int if delay_minutes is defined and delay_minutes != '' else states('input_number.device_offline_delay_minutes') | int }}"
+          friendly_name: "{{ state_attr(entity_id, 'friendly_name') or entity_id.split('.')[1] | replace('_', ' ') | title }}"
+      
+      # Only proceed if delay is greater than 0
+      - condition: template
+        value_template: "{{ final_delay > 0 }}"
+      
+      # Wait for the delay
+      - delay:
+          minutes: "{{ final_delay }}"
+      
+      # Check if device is still offline after delay
+      - condition: template
+        value_template: "{{ states(entity_id) in ['unavailable', 'unknown'] }}"
+      
+      # Send the alert with custom delay indication
+      - action: script.send_alert
+        data:
+          message: "📵 DEVICE OFFLINE: {{ friendly_name }} has been {{ states(entity_id) }} for {{ final_delay }} minute{{ 's' if final_delay != 1 else '' }}{% if delay_minutes is defined and delay_minutes != '' and delay_minutes | int != states('input_number.device_offline_delay_minutes') | int %} (custom delay){% endif %}"
+          level: "warning"
+          channel: "technical"
+          location: "{{ friendly_name }}"
+
 # ===================================
 # BINARY SENSOR AUTOMATION GENERATOR
 # ===================================
@@ -769,6 +829,12 @@ input_text:
   threshold_entities_3:
     name: "Threshold Alert Entities (Group 3)"
     max: 255
+
+  temp_offline_min:
+    name: "Temporary Offline Delay (minutes)"
+    initial: ""
+    max: 3
+    icon: mdi:timer
 
   # Threshold form helpers
   temp_threshold_entity:
@@ -857,6 +923,16 @@ input_select:
     initial: "on"
     icon: mdi:state-machine
 
+input_number:
+  device_offline_delay_minutes:
+    name: "Device Offline Alert Delay"
+    min: 0
+    max: 60
+    step: 1
+    initial: 5
+    unit_of_measurement: "minutes"
+    icon: mdi:timer
+
 # ===================================
 # TEMPLATE SENSORS
 # ===================================
@@ -885,7 +961,7 @@ template:
 automation:
   - alias: "Threshold Alert Monitor"
     id: "threshold_alert_monitor"
-    description: "Monitor entities for threshold breaches with device availability alerts and auto-location"
+    description: "Monitor entities for threshold breaches with device availability alerts and device-specific offline delays"
     trigger:
       - trigger: event
         event_type: state_changed
@@ -914,20 +990,47 @@ automation:
           old_is_number: "{{ old_state | regex_match('^-?[0-9]+\\.?[0-9]*$') }}"
           device_went_offline: "{{ old_is_number and not new_is_number and new_state in ['unavailable', 'unknown'] }}"
           device_came_online: "{{ not old_is_number and new_is_number and old_state in ['unavailable', 'unknown'] }}"
+          # Smart delay lookup: check threshold data for device-specific delay, fallback to global
+          device_specific_delay: >
+            {% set entity = triggered_entity %}
+            {% set entries = all_content.split('|') %}
+            {% set found_delay = '' %}
+            {% for entry in entries %}
+              {% if entry != '' and entry.startswith(entity + ':') %}
+                {% set parts = entry.split(':') %}
+                {% if parts|length >= 5 and parts[4] != '' and parts[4]|int >= 0 %}
+                  {% set found_delay = parts[4]|int %}
+                {% endif %}
+              {% endif %}
+            {% endfor %}
+            {{ found_delay if found_delay != '' else states('input_number.device_offline_delay_minutes')|int }}
       
-      # Handle device going offline
+      # Handle device going offline - use device-specific or global delay
       - if:
           - condition: template
             value_template: "{{ device_went_offline }}"
         then:
-          - action: script.send_alert
-            data:
-              message: "📵 DEVICE OFFLINE: {{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }} is now {{ new_state }}"
-              level: "warning"
-              channel: "technical"
-              entity_id: "{{ triggered_entity }}"
+          - choose:
+              # If delay is 0, send immediate alert
+              - conditions:
+                  - condition: template
+                    value_template: "{{ device_specific_delay == 0 }}"
+                sequence:
+                  - action: script.send_alert
+                    data:
+                      message: "📵 DEVICE OFFLINE: {{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }} is now {{ new_state }}"
+                      level: "warning"
+                      channel: "technical"
+                      location: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
+            # If delay is configured, start delayed alert script
+            default:
+              - action: script.delayed_offline_alert
+                data:
+                  entity_id: "{{ triggered_entity }}"
+                  initial_state: "{{ new_state }}"
+                  delay_minutes: "{{ device_specific_delay }}"
       
-      # Handle device coming back online
+      # Handle device coming back online (immediate alert)
       - if:
           - condition: template
             value_template: "{{ device_came_online }}"
@@ -941,9 +1044,9 @@ automation:
               message: "📶 DEVICE ONLINE: {{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }} is back online ({{ current_clean }}{{ unit_text }})"
               level: "info"
               channel: "technical"
-              entity_id: "{{ triggered_entity }}"
+              location: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
       
-      # Process threshold logic only if both states are numeric
+      # Process threshold logic only if both states are numeric (unchanged)
       - if:
           - condition: template
             value_template: "{{ new_is_number and old_is_number }}"
@@ -977,7 +1080,7 @@ automation:
                             message: "🚨 {{ alert_message }} - Current: {{ current_clean }}{{ unit_text }} - Threshold: {{ condition_type }} {{ threshold_clean }}{{ unit_text }}"
                             level: warning
                             channel: "{{ states('input_select.threshold_alert_channel') }}"
-                            entity_id: "{{ triggered_entity }}"
+                            location: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
 
   - alias: Saturday Morning Status Report Example
     id: status_report_template
