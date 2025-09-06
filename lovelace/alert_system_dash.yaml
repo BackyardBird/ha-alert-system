@@ -110,6 +110,63 @@ views:
               - entity: input_text.temp_remove_entity
                 name: Entity ID to Remove
                 icon: mdi:target
+# Add this section to your dashboard - insert after the "Remove Alert" section
+
+          - type: entities
+            title: 🔧 Advanced: Direct Storage Editing
+            show_header_toggle: false
+            entities:
+              - entity: input_text.threshold_entities
+                name: "Storage Helper 1"
+                icon: mdi:database
+              - entity: input_text.threshold_entities_2
+                name: "Storage Helper 2" 
+                icon: mdi:database
+              - entity: input_text.threshold_entities_3
+                name: "Storage Helper 3"
+                icon: mdi:database
+          - type: markdown
+            title: ⚠️ Direct Editing Guide
+            content: |
+              **⚠️ Warning: Direct editing requires knowledge of the storage format!**
+
+              ### Storage Format:
+              ```
+              entity:threshold:condition:message:offline_min
+              ```
+
+              ### Multiple Entries:
+              Separate with `|` (pipe character):
+              ```
+              sensor.temp:25:above:Hot:10|sensor.humidity:70:above:Humid:5
+              ```
+
+              ### Examples:
+              - `sensor.bedroom_temp:25:above:Too hot:10` *(10-min offline delay)*
+              - `sensor.outdoor_temp:35:above:Critical temp:30` *(30-min offline delay)*
+              - `sensor.humidity:70:above:Too humid` *(uses global delay)*
+              - `sensor.garage:0:above::2` *(offline monitoring only, 2-min delay)*
+
+              ### Field Meanings:
+              1. **entity**: sensor.your_sensor_name
+              2. **threshold**: numeric value (25, 70, etc.)
+              3. **condition**: "above" or "below"
+              4. **message**: your custom message (can be empty)
+              5. **offline_min**: minutes for offline delay (optional - leave empty for global)
+
+              ### Editing Tips:
+              - **No spaces** around the `:` separators
+              - **Use pipe `|`** to separate multiple entries
+              - **Empty fields** are OK (like empty message: `sensor.temp:25:above::10`)
+              - **Test after editing** using "List All" button above
+              - **Backup recommended** before major edits
+
+              ### Common Mistakes:
+              ❌ `sensor.temp: 25: above: Hot` *(spaces around colons)*
+              ❌ `sensor.temp,25,above,Hot` *(commas instead of colons)*
+              ❌ `sensor.temp:25:above:Hot;sensor.hum:70:above:Humid` *(semicolon instead of pipe)*
+
+              ✅ `sensor.temp:25:above:Hot|sensor.hum:70:above:Humid` *(correct format)*
           - type: button
             tap_action:
               action: call-service
