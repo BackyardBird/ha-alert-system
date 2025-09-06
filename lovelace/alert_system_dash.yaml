@@ -116,19 +116,57 @@ views:
               service: script.remove_threshold_alert_from_form
             name: 🗑️ Remove Alert
             icon: mdi:delete
+          - type: markdown
+            title: "📊 Current Storage Contents"
+            content: |
+              **Helper 1:** {{ states('input_text.threshold_entities')|length }} characters
+              ```
+              {{ states('input_text.threshold_entities') if states('input_text.threshold_entities') != '' else 'Empty' }}
+              ```
+              
+              **Helper 2:** {{ states('input_text.threshold_entities_2')|length }} characters  
+              ```
+              {{ states('input_text.threshold_entities_2') if states('input_text.threshold_entities_2') != '' else 'Empty' }}
+              ```
+              
+              **Helper 3:** {{ states('input_text.threshold_entities_3')|length }} characters
+              ```
+              {{ states('input_text.threshold_entities_3') if states('input_text.threshold_entities_3') != '' else 'Empty' }}
+              ```
           - type: entities
-            title: "🔧 Advanced: Direct Storage Editing"
+            title: "🔧 Edit Storage (Click Any Row)"
             show_header_toggle: false
             entities:
               - entity: input_text.threshold_entities
-                name: "Storage Helper 1"
-                icon: mdi:database
+                name: "📝 Edit Helper 1"
+                icon: mdi:database-edit
+                secondary_info: "{{ states('input_text.threshold_entities')|length }} chars"
               - entity: input_text.threshold_entities_2
-                name: "Storage Helper 2" 
-                icon: mdi:database
+                name: "📝 Edit Helper 2"
+                icon: mdi:database-edit
+                secondary_info: "{{ states('input_text.threshold_entities_2')|length }} chars"
               - entity: input_text.threshold_entities_3
-                name: "Storage Helper 3"
-                icon: mdi:database
+                name: "📝 Edit Helper 3"
+                icon: mdi:database-edit
+                secondary_info: "{{ states('input_text.threshold_entities_3')|length }} chars"
+
+          - type: markdown
+            title: "💡 How to Edit"
+            content: |
+              ### ✏️ Editing Instructions:
+              1. **Click any "Edit Helper" row** above
+              2. **Popup opens** with proper multiline textarea
+              3. **Edit the content** using the textarea
+              4. **Click "Save"** to apply changes
+              5. **Content updates** in the display above
+              
+              ### 📋 Quick Reference:
+              - **View content**: See formatted display above
+              - **Edit content**: Click any edit row
+              - **Character count**: Shows in secondary info
+              - **Format**: `entity:threshold:condition:message:offline_min`
+
+
           - type: markdown
             title: ⚠️ Direct Editing Guide
             content: |
@@ -214,7 +252,7 @@ views:
               `entity:threshold:condition:message:offline_min`
 
               **Examples:**
-              - `sensor.temp:25:above:Hot:10` *(10-min offline delay)*
+              - `sensor.temp:25:above:Hot:10` *(10-min offline delay)*ƒ
               - `sensor.humidity:70:above:Humid` *(uses global delay)*
               - `sensor.door:0:above::2` *(2-min delay, offline monitoring only)*
 
