@@ -265,4 +265,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **⭐ If this project helped you, please give it a star!**
 
-**❓ Having issues?** Check the [full documentation](Alert%20System%20Setup%20and%20Usage%20Guide.md) or open an issue.
+**❓ Having issues?** Check the [full documentation](Alert System Setup and Usage Guide.md) or open an issue.
