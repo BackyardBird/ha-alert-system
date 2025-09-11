@@ -1001,9 +1001,12 @@ automation:
             {% set found_delay = '' %}
             {% for entry in entries %}
               {% if entry != '' and entry.startswith(entity + ':') %}
-                {% set parts = entry.split(':') %}
-                {% if parts|length >= 5 and parts[4] != '' and parts[4]|int >= 0 %}
-                  {% set found_delay = parts[4]|int %}
+                {% set parts = entry.rsplit(':', 1) %}
+                {% if parts|length == 2 %}
+                  {% set delay_part = parts[1] %}
+                  {% if delay_part | regex_match('^\\d+$') %}
+                    {% set found_delay = delay_part | int %}
+                  {% endif %}
                 {% endif %}
               {% endif %}
             {% endfor %}
