@@ -64,7 +64,7 @@ script:
                 data:
                   target: "{{ chat_id | int }}"
                   message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if final_location %}\n📍 {{ final_location | e }}{% endif %}"
-                  parse_mode: "HTML"
+                  parse_mode: "html"
           - conditions:
               - condition: template
                 value_template: "{{ channel == 'main' }}"
@@ -73,7 +73,7 @@ script:
                 data:
                   target: "{{ main_chat | int }}"
                   message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if final_location %}\n📍 {{ final_location | e }}{% endif %}"
-                  parse_mode: "HTML"
+                  parse_mode: "html"
           - conditions:
               - condition: template
                 value_template: "{{ channel == 'technical' }}"
@@ -82,7 +82,7 @@ script:
                 data:
                   target: "{{ tech_chat | int }}"
                   message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if final_location %}\n📍 {{ final_location | e }}{% endif %}"
-                  parse_mode: "HTML"
+                  parse_mode: "html"
           - conditions:
               - condition: template
                 value_template: "{{ channel == 'both' }}"
@@ -91,18 +91,18 @@ script:
                 data:
                   target: "{{ main_chat | int }}"
                   message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if final_location %}\n📍 {{ final_location | e }}{% endif %}"
-                  parse_mode: "HTML"
+                  parse_mode: "html"
               - action: telegram_bot.send_message
                 data:
                   target: "{{ tech_chat | int }}"
                   message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if final_location %}\n📍 {{ final_location | e }}{% endif %}"
-                  parse_mode: "HTML"
+                  parse_mode: "html"
         default:
           - action: telegram_bot.send_message
             data:
               target: "{{ tech_chat | int }}"
               message: "<b>⚠️ {{ house_name|upper }} WARNING</b> {{ timestamp }}\n🚨 ALERT SYSTEM: Invalid channel '{{ channel }}' specified. Message sent to technical channel as fallback.\n\nOriginal message: {{ message | e }}{% if final_location %}\n📍 {{ final_location | e }}{% endif %}"
-              parse_mode: "HTML"
+              parse_mode: "html"
 
   quick_alert:
     alias: "Quick Alert"
