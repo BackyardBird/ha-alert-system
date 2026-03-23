@@ -63,7 +63,7 @@ script:
               - action: telegram_bot.send_message
                 data:
                   target: "{{ chat_id | int }}"
-                  message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if final_location %}\n📍 {{ final_location | e }}{% endif %}"
+                  message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if final_location %}\n>> {{ final_location | e }}{% endif %}"
                   parse_mode: "html"
           - conditions:
               - condition: template
@@ -72,7 +72,7 @@ script:
               - action: telegram_bot.send_message
                 data:
                   target: "{{ main_chat | int }}"
-                  message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if final_location %}\n📍 {{ final_location | e }}{% endif %}"
+                  message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if final_location %}\n>> {{ final_location | e }}{% endif %}"
                   parse_mode: "html"
           - conditions:
               - condition: template
@@ -81,7 +81,7 @@ script:
               - action: telegram_bot.send_message
                 data:
                   target: "{{ tech_chat | int }}"
-                  message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if final_location %}\n📍 {{ final_location | e }}{% endif %}"
+                  message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if final_location %}\n>> {{ final_location | e }}{% endif %}"
                   parse_mode: "html"
           - conditions:
               - condition: template
@@ -90,18 +90,18 @@ script:
               - action: telegram_bot.send_message
                 data:
                   target: "{{ main_chat | int }}"
-                  message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if final_location %}\n📍 {{ final_location | e }}{% endif %}"
+                  message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if final_location %}\n>> {{ final_location | e }}{% endif %}"
                   parse_mode: "html"
               - action: telegram_bot.send_message
                 data:
                   target: "{{ tech_chat | int }}"
-                  message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if final_location %}\n📍 {{ final_location | e }}{% endif %}"
+                  message: "<b>{{ level_emoji }} {{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if final_location %}\n>> {{ final_location | e }}{% endif %}"
                   parse_mode: "html"
         default:
           - action: telegram_bot.send_message
             data:
               target: "{{ tech_chat | int }}"
-              message: "<b>⚠️ {{ house_name|upper }} WARNING</b> {{ timestamp }}\n🚨 ALERT SYSTEM: Invalid channel '{{ channel }}' specified. Message sent to technical channel as fallback.\n\nOriginal message: {{ message | e }}{% if final_location %}\n📍 {{ final_location | e }}{% endif %}"
+              message: "<b>{{ house_name|upper }} WARNING</b> {{ timestamp }}\nALERT SYSTEM: Invalid channel '{{ channel }}' specified. Message sent to technical channel as fallback.\n\nOriginal message: {{ message | e }}{% if final_location %}\n>> {{ final_location | e }}{% endif %}"
               parse_mode: "html"
 
   quick_alert:
@@ -146,7 +146,7 @@ script:
     sequence:
       - action: script.send_alert
         data:
-          message: "🖥️ SYSTEM: {{ message }}"
+          message: "SYSTEM: {{ message }}"
           level: "{{ level | default('warning') }}"
           channel: "{{ channel | default('technical') }}"
           chat_id: "{{ chat_id | default('') }}"
@@ -176,7 +176,7 @@ script:
     sequence:
       - action: script.send_alert
         data:
-          message: "🔒 SECURITY: {{ message }}"
+          message: "SECURITY: {{ message }}"
           level: "critical"
           location: "{{ location | default('') }}"
           entity_id: "{{ entity_id | default('') }}"
@@ -565,7 +565,7 @@ script:
       - action: script.tech_alert
         data:
           message: |
-            📊 ENHANCED THRESHOLD ALERTS
+            ENHANCED THRESHOLD ALERTS
 
             Global offline delay: {{ states('input_number.device_offline_delay_minutes') }} minutes
 
@@ -637,7 +637,7 @@ script:
             sequence:
               - action: script.tech_alert
                 data:
-                  message: "❌ VALIDATION ERROR: Please enter a binary sensor entity ID"
+                  message: "VALIDATION ERROR: Please enter a binary sensor entity ID"
                   level: "warning"
           
           # Check if entity ID has correct format
@@ -647,7 +647,7 @@ script:
             sequence:
               - action: script.tech_alert
                 data:
-                  message: "❌ VALIDATION ERROR: Entity ID must contain a dot (example: binary_sensor.front_door)"
+                  message: "VALIDATION ERROR: Entity ID must contain a dot (example: binary_sensor.front_door)"
                   level: "warning"
           
           # Check if it's a binary sensor (not regular sensor)
@@ -657,7 +657,7 @@ script:
             sequence:
               - action: script.tech_alert
                 data:
-                  message: "⚠️ VALIDATION WARNING: Entity should start with 'binary_sensor.' not 'sensor.' - Use {{ entity_id.replace('sensor.', 'binary_sensor.') if entity_id.startswith('sensor.') else 'binary_sensor.' + entity_id.split('.')[-1] }}"
+                  message: "VALIDATION WARNING: Entity should start with 'binary_sensor.' not 'sensor.' - Use {{ entity_id.replace('sensor.', 'binary_sensor.') if entity_id.startswith('sensor.') else 'binary_sensor.' + entity_id.split('.')[-1] }}"
                   level: "warning"
           
           # Check if entity exists in Home Assistant
@@ -667,7 +667,7 @@ script:
             sequence:
               - action: script.tech_alert
                 data:
-                  message: "❌ VALIDATION ERROR: Entity '{{ entity_id }}' not found in Home Assistant. Check Developer Tools → States to verify the correct entity ID."
+                  message: "VALIDATION ERROR: Entity '{{ entity_id }}' not found in Home Assistant. Check Developer Tools → States to verify the correct entity ID."
                   level: "warning"
           
           # Check if message is empty
@@ -677,7 +677,7 @@ script:
             sequence:
               - action: script.tech_alert
                 data:
-                  message: "❌ VALIDATION ERROR: Please enter an alert message"
+                  message: "VALIDATION ERROR: Please enter an alert message"
                   level: "warning"
           
           # Entity exists but is currently unavailable (warn but allow)
@@ -687,7 +687,7 @@ script:
             sequence:
               - action: script.tech_alert
                 data:
-                  message: "⚠️ VALIDATION WARNING: Entity '{{ entity_id }}' exists but is currently unavailable. The automation will still be created but may not work until the device comes online."
+                  message: "VALIDATION WARNING: Entity '{{ entity_id }}' exists but is currently unavailable. The automation will still be created but may not work until the device comes online."
                   level: "info"
                   
         # All validations passed - success message
@@ -699,9 +699,9 @@ script:
           - action: script.tech_alert
             data:
               message: |
-                ✅ VALIDATION SUCCESS: Binary automation form is valid!
-                
-                📋 Configuration Summary:
+                VALIDATION SUCCESS: Binary automation form is valid!
+
+                Configuration Summary:
                 • Entity: {{ entity_name }} ({{ entity_id }})
                 • Current State: {{ current_state }}
                 • Trigger: When state changes to "{{ trigger_state }}"
@@ -753,7 +753,7 @@ script:
       # Send the alert with custom delay indication
       - action: script.send_alert
         data:
-          message: "📵 DEVICE OFFLINE: {{ friendly_name }} has been {{ states(entity_id) }} for {{ final_delay }} minute{{ 's' if final_delay != 1 else '' }}{% if delay_minutes is defined and delay_minutes != '' and delay_minutes | int != states('input_number.device_offline_delay_minutes') | int %} (custom delay){% endif %}"
+          message: "DEVICE OFFLINE: {{ friendly_name }} has been {{ states(entity_id) }} for {{ final_delay }} minute{{ 's' if final_delay != 1 else '' }}{% if delay_minutes is defined and delay_minutes != '' and delay_minutes | int != states('input_number.device_offline_delay_minutes') | int %} (custom delay){% endif %}"
           level: "warning"
           channel: "technical"
           location: "{{ friendly_name }}"
@@ -1025,7 +1025,7 @@ automation:
                 sequence:
                   - action: script.send_alert
                     data:
-                      message: "📵 DEVICE OFFLINE: {{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }} is now {{ new_state }}"
+                      message: "DEVICE OFFLINE: {{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }} is now {{ new_state }}"
                       level: "warning"
                       channel: "technical"
                       location: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
@@ -1048,7 +1048,7 @@ automation:
               current_clean: "{{ new_state | float | int if (new_state | float) == (new_state | float | int) else (new_state | float | round(1)) }}"
           - action: script.send_alert
             data:
-              message: "📶 DEVICE ONLINE: {{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }} is back online ({{ current_clean }}{{ unit_text }})"
+              message: "DEVICE ONLINE: {{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }} is back online ({{ current_clean }}{{ unit_text }})"
               level: "info"
               channel: "technical"
               location: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
@@ -1084,7 +1084,7 @@ automation:
                             threshold_clean: "{% if threshold_value == (threshold_value | int) %}{{ threshold_value | int }}{% else %}{{ threshold_value | round(1) }}{% endif %}"
                         - action: script.send_alert
                           data:
-                            message: "🚨 {{ alert_message }} - Current: {{ current_clean }}{{ unit_text }} - Threshold: {{ condition_type }} {{ threshold_clean }}{{ unit_text }}"
+                            message: "{{ alert_message }} - Current: {{ current_clean }}{{ unit_text }} - Threshold: {{ condition_type }} {{ threshold_clean }}{{ unit_text }}"
                             level: warning
                             channel: "{{ states('input_select.threshold_alert_channel') }}"
                             location: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
@@ -1216,13 +1216,13 @@ automation:
           
           # Create rich alert message
           alert_message: >
-            🌡️ THRESHOLD ALERT: {{ entity_friendly_name }}
-            
-            📊 Current: {{ current_value_clean }}{{ unit_text }} (was {{ previous_value_clean }}{{ unit_text }})
-            ⚠️ Threshold: {{ threshold_condition }} {{ threshold_clean }}{{ unit_text }}
-            📈 Change: {{ ((current_state | float - previous_state | float) | round(1)) }}{{ unit_text }}
+            THRESHOLD ALERT: {{ entity_friendly_name }}
+
+            Current: {{ current_value_clean }}{{ unit_text }} (was {{ previous_value_clean }}{{ unit_text }})
+            Threshold: {{ threshold_condition }} {{ threshold_clean }}{{ unit_text }}
+            Change: {{ ((current_state | float - previous_state | float) | round(1)) }}{{ unit_text }}
             {% if threshold_difference | float > 0 %}
-            🚨 Exceeded by: {{ threshold_difference | round(1) }}{{ unit_text }}
+            Exceeded by: {{ threshold_difference | round(1) }}{{ unit_text }}
             {% endif %}
           
           # Determine appropriate channel based on severity
@@ -1252,7 +1252,7 @@ automation:
               seconds: 30
           - action: script.send_alert
             data:
-              message: "🚨 CRITICAL FOLLOW-UP: {{ entity_friendly_name }} remains at {{ current_value_clean }}{{ unit_text }} (threshold: {{ threshold_condition }} {{ threshold_clean }}{{ unit_text }})"
+              message: "CRITICAL FOLLOW-UP: {{ entity_friendly_name }} remains at {{ current_value_clean }}{{ unit_text }} (threshold: {{ threshold_condition }} {{ threshold_clean }}{{ unit_text }})"
               level: "critical"
               channel: "both"
               entity_id: "{{ triggered_entity }}"
