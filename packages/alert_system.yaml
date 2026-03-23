@@ -41,7 +41,7 @@ script:
         default: "main"
     sequence:
       - variables:
-          level_emoji: "{% if level == 'critical' %}🚨{% elif level == 'warning' %}⚠️{% else %}ℹ️{% endif %}"
+          level_emoji: ""
           house_name: !secret house_name
           timestamp: "{% if include_timestamp | default(true) %}{{ now().strftime('%H:%M') }}{% endif %}"
           main_chat: !secret telegram_main_alerts
@@ -322,7 +322,7 @@ script:
     sequence:
       - action: script.send_alert
         data:
-          message: "Alert system test - everything is working correctly! 🎉"
+          message: "Alert system test - everything is working correctly!"
           level: "info"
           channel: "{{ channel | default('both') }}"
           chat_id: "{{ chat_id | default('') }}"
@@ -608,7 +608,7 @@ script:
       - action: script.send_alert
         data:
           message: |
-            🧪 THRESHOLD ALERT TEST
+            THRESHOLD ALERT TEST
 
             This is a test of the threshold alert system.
             Current time: {{ now().strftime('%H:%M:%S') }}
@@ -710,7 +710,7 @@ script:
                 • Location: {{ location_text }}
                 • Message: "{{ message }}"
                 
-                🎯 Next Steps:
+                Next Steps:
                 1. Copy the generated YAML code below the form
                 2. Go to Settings → Automations & Scenes → Create Automation
                 3. Click the ⋮ menu → Edit in YAML
@@ -1103,7 +1103,7 @@ automation:
     actions:
       - data:
           alerts:
-            - message: 🌅 Saturday Morning Report - {{ now().strftime('%B %d, %Y') }}
+            - message: Saturday Morning Report - {{ now().strftime('%B %d, %Y') }}
               level: info
               channel: main
             - message: >-
@@ -1136,7 +1136,7 @@ automation:
                 }}
               location: Energy Monitor
               channel: main
-            - message: Have a great Saturday! ☕
+            - message: Have a great Saturday!
               level: info
               channel: main
         action: script.bulk_alert
