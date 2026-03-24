@@ -1083,7 +1083,7 @@ automation:
                             threshold_clean: "{% if threshold_value == (threshold_value | int) %}{{ threshold_value | int }}{% else %}{{ threshold_value | round(1) }}{% endif %}"
                         - action: script.send_alert
                           data:
-                            message: "{{ alert_message }} - Current: {{ current_clean }}{{ unit_text }} - Threshold: {{ condition_type }} {{ threshold_clean }}{{ unit_text }}"
+                            message: "{{ alert_message }}\nCurrent: {{ current_clean }}{{ unit_text }}\nThreshold: {{ condition_type }} {{ threshold_clean }}{{ unit_text }}"
                             level: warning
                             channel: "{{ states('input_select.threshold_alert_channel') }}"
                             location: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
