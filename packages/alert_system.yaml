@@ -1,6 +1,8 @@
 # packages/alert_system.yaml
-# Version: 5.5.1 - added offline alert delay supportß 
-# Core alert system with working binary YAML generator
+# Version: 6.0.0 - simplified alert system
+# Removed wrapper scripts, binary automation generator, example automations
+# New storage format: entity:threshold:condition:offline_min (no message field)
+# Support for offline-only monitoring with empty threshold/condition
 
   # ===================================
   # CORE ALERT SYSTEM SCRIPTS
@@ -103,27 +105,6 @@ script:
               message: "<b>{{ house_name|upper }} WARNING</b> {{ timestamp }}\nALERT SYSTEM: Invalid channel '{{ channel }}' specified. Message sent to technical channel as fallback.\n\nOriginal message: {{ message | e }}{% if final_location %}\n>> {{ final_location | e }}{% endif %}"
               parse_mode: "html"
 
-  quick_alert:
-    alias: "Quick Alert"
-    description: "Send a simple info-level alert to main channel"
-    fields:
-      message:
-        description: "Alert message"
-        required: true
-        example: "Water leak detected in basement"
-      chat_id:
-        description: "Specific chat ID (optional)"
-        required: false
-        example: "-1001234567890"
-    sequence:
-      - action: script.send_alert
-        data:
-          message: "{{ message }}"
-          level: "info"
-          channel: "main"
-          chat_id: "{{ chat_id | default('') }}"
-          include_timestamp: true
-
   system_alert:
     alias: "System Alert"
     description: "Send a system-level alert to technical channel"
@@ -183,42 +164,6 @@ script:
           chat_id: "{{ chat_id | default('') }}"
           include_timestamp: true
 
-  device_alert:
-      alias: "Device Alert"
-      description: "Send a device-related alert to technical channel with automatic location detection"
-      fields:
-        device_name:
-          description: "Name of the device"
-          required: true
-          example: "Living Room Sensor"
-        message:
-          description: "Device alert message"
-          required: true
-          example: "Battery low"
-        entity_id:
-          description: "Entity ID for automatic location detection (optional)"
-          example: "sensor.living_room_temperature"
-          required: false
-        level:
-          description: "Alert level"
-          default: "info"
-        channel:
-          description: "Alert channel (main/technical/both)"
-          default: "technical"
-        chat_id:
-          description: "Specific chat ID (optional)"
-          required: false
-          example: "-1001234567890"
-      sequence:
-        - action: script.send_alert
-          data:
-            message: "{{ device_name }}: {{ message }}"
-            level: "{{ level | default('info') }}"
-            channel: "{{ channel | default('technical') }}"
-            entity_id: "{{ entity_id | default('') }}"
-            chat_id: "{{ chat_id | default('') }}"
-            include_timestamp: true
-
   bulk_alert:
     alias: "Bulk Alert"
     description: "Send multiple alerts at once"
@@ -250,64 +195,6 @@ script:
                 channel: "{{ repeat.item.channel | default('main') }}"
                 chat_id: "{{ repeat.item.chat_id | default('') }}"
 
-  tech_alert:
-    alias: "Technical Alert"
-    description: "Send alert specifically to technical channel"
-    fields:
-      message:
-        description: "Technical alert message"
-        required: true
-        example: "Sensor battery low"
-      entity_id:
-        description: "Entity ID for automatic location detection (optional)"
-        example: "sensor.living_room_temperature"
-        required: false
-      level:
-        description: "Alert level"
-        default: "info"
-      location:
-        description: "Location (optional)"
-        required: false
-        example: "Living Room"
-    sequence:
-      - action: script.send_alert
-        data:
-          message: "{{ message }}"
-          level: "{{ level | default('info') }}"
-          location: "{{ location | default('') }}"
-          entity_id: "{{ entity_id | default('') }}"
-          channel: "technical"
-          include_timestamp: true
-
-  main_alert:
-    alias: "Main Alert"
-    description: "Send alert specifically to main channel"
-    fields:
-      message:
-        description: "Main alert message"
-        required: true
-        example: "Water leak detected in basement"
-      entity_id:
-        description: "Entity ID for automatic location detection (optional)"
-        example: "binary_sensor.basement_water_sensor"
-        required: false
-      level:
-        description: "Alert level"
-        default: "info"
-      location:
-        description: "Location (optional)"
-        required: false
-        example: "Basement"
-    sequence:
-      - action: script.send_alert
-        data:
-          message: "{{ message }}"
-          level: "{{ level | default('info') }}"
-          location: "{{ location | default('') }}"
-          entity_id: "{{ entity_id | default('') }}"
-          channel: "main"
-          include_timestamp: true
-
   test_alert:
     alias: "Test Alert System"
     description: "Send a test alert to verify the system is working"
@@ -333,24 +220,20 @@ script:
 
   add_threshold_alert:
     alias: "Add Threshold Alert"
-    description: "Add an entity to threshold monitoring with optional offline delay"
+    description: "Add an entity to threshold or offline-only monitoring. Leave threshold and condition empty for offline-only monitoring."
     fields:
       entity_id:
         description: "Entity to monitor"
         required: true
         example: "sensor.temperature"
       threshold:
-        description: "Threshold value"
-        required: true
+        description: "Threshold value (leave empty for offline-only monitoring)"
+        required: false
         example: "25"
       condition:
-        description: "Trigger condition"
-        required: true
-        example: "above"
-      custom_message:
-        description: "Custom alert message (optional)"
+        description: "Trigger condition: above or below (leave empty for offline-only monitoring)"
         required: false
-        example: "Temperature is critical"
+        example: "above"
       offline_min:
         description: "Custom offline delay in minutes (optional, blank = use global)"
         required: false
@@ -358,12 +241,11 @@ script:
     sequence:
       - variables:
           entity_name: "{{ state_attr(entity_id, 'friendly_name') or entity_id.split('.')[1] | replace('_', ' ') | title }}"
-          default_message: "{% if condition == 'above' %}{{ entity_name }} is above threshold{% else %}{{ entity_name }} is below threshold{% endif %}"
-          alert_message: "{{ custom_message if custom_message else default_message }}"
-          # Only add delay part if offline_min is provided and valid
-          delay_part: "{% if offline_min and offline_min != '' and offline_min | int >= 0 %}:{{ offline_min }}{% endif %}"
-          new_entry: "{{ entity_id }}:{{ threshold }}:{{ condition }}:{{ alert_message }}{{ delay_part }}"
-      
+          has_threshold: "{{ threshold is defined and threshold != '' and condition is defined and condition != '' }}"
+          threshold_part: "{% if has_threshold %}{{ threshold }}:{{ condition }}{% else %}:{% endif %}"
+          delay_part: "{% if offline_min is defined and offline_min != '' and offline_min | int >= 0 %}:{{ offline_min }}{% endif %}"
+          new_entry: "{{ entity_id }}:{{ threshold_part }}{{ delay_part }}"
+
       # Try to add to first available helper
       - choose:
           - conditions:
@@ -375,10 +257,11 @@ script:
                   entity_id: input_text.threshold_entities
                 data:
                   value: "{% if states('input_text.threshold_entities') %}{{ states('input_text.threshold_entities') }}|{{ new_entry }}{% else %}{{ new_entry }}{% endif %}"
-              - action: script.tech_alert
+              - action: script.send_alert
                 data:
-                  message: "Added threshold alert for {{ entity_name }}: {{ condition }} {{ threshold }}{% if offline_min and offline_min != '' %}, offline delay: {{ offline_min }}min{% endif %}"
+                  message: "Added monitoring for {{ entity_name }}{% if has_threshold %}: {{ condition }} {{ threshold }}{% else %}: offline only{% endif %}{% if offline_min is defined and offline_min != '' %}, offline delay: {{ offline_min }}min{% endif %}"
                   level: info
+                  channel: technical
           - conditions:
               - condition: template
                 value_template: "{{ (states('input_text.threshold_entities_2') | length + new_entry | length + 1) <= 250 }}"
@@ -388,10 +271,11 @@ script:
                   entity_id: input_text.threshold_entities_2
                 data:
                   value: "{% if states('input_text.threshold_entities_2') %}{{ states('input_text.threshold_entities_2') }}|{{ new_entry }}{% else %}{{ new_entry }}{% endif %}"
-              - action: script.tech_alert
+              - action: script.send_alert
                 data:
-                  message: "Added threshold alert for {{ entity_name }}: {{ condition }} {{ threshold }}{% if offline_min and offline_min != '' %}, offline delay: {{ offline_min }}min{% endif %}"
+                  message: "Added monitoring for {{ entity_name }}{% if has_threshold %}: {{ condition }} {{ threshold }}{% else %}: offline only{% endif %}{% if offline_min is defined and offline_min != '' %}, offline delay: {{ offline_min }}min{% endif %}"
                   level: info
+                  channel: technical
           - conditions:
               - condition: template
                 value_template: "{{ (states('input_text.threshold_entities_3') | length + new_entry | length + 1) <= 250 }}"
@@ -401,15 +285,17 @@ script:
                   entity_id: input_text.threshold_entities_3
                 data:
                   value: "{% if states('input_text.threshold_entities_3') %}{{ states('input_text.threshold_entities_3') }}|{{ new_entry }}{% else %}{{ new_entry }}{% endif %}"
-              - action: script.tech_alert
+              - action: script.send_alert
                 data:
-                  message: "Added threshold alert for {{ entity_name }}: {{ condition }} {{ threshold }}{% if offline_min and offline_min != '' %}, offline delay: {{ offline_min }}min{% endif %}"
+                  message: "Added monitoring for {{ entity_name }}{% if has_threshold %}: {{ condition }} {{ threshold }}{% else %}: offline only{% endif %}{% if offline_min is defined and offline_min != '' %}, offline delay: {{ offline_min }}min{% endif %}"
                   level: info
+                  channel: technical
         default:
-          - action: script.tech_alert
+          - action: script.send_alert
             data:
               message: "Error: All threshold storage helpers are full. Please remove some entities first."
               level: warning
+              channel: technical
 
   remove_threshold_alert:
     alias: "Remove Threshold Alert"
@@ -459,58 +345,60 @@ script:
               entity_id: input_text.threshold_entities_3
             data:
               value: "{{ new_content }}"
-      - action: script.tech_alert
+      - action: script.send_alert
         data:
           message: "Remove operation completed for {{ entity_id }}. Use 'List All' to verify."
           level: info
+          channel: technical
 
   create_threshold_alert_from_form:
     alias: "Create Threshold Alert from Form"
-    description: "Create threshold alert using the card form inputs with enhanced validation and offline delay support"
+    description: "Create threshold alert using the card form inputs"
     sequence:
       - variables:
           entity_id: "{{ states('input_text.temp_threshold_entity') }}"
           threshold: "{{ states('input_text.temp_threshold_value') }}"
           condition: "{{ states('input_select.temp_threshold_condition') }}"
-          message: "{{ states('input_text.temp_threshold_message') }}"
           offline_delay: "{{ states('input_text.temp_offline_min') }}"
-      
+
       # Simple validation
       - choose:
           - conditions:
               - condition: template
                 value_template: "{{ entity_id == '' or entity_id == 'unavailable' or entity_id == 'unknown' }}"
             sequence:
-              - action: script.tech_alert
+              - action: script.send_alert
                 data:
                   message: "Error: Please enter an entity ID"
                   level: warning
+                  channel: technical
           - conditions:
               - condition: template
                 value_template: "{{ '.' not in entity_id }}"
             sequence:
-              - action: script.tech_alert
+              - action: script.send_alert
                 data:
                   message: "Error: Entity ID must contain a dot (like sensor.temperature)"
                   level: warning
+                  channel: technical
           - conditions:
               - condition: template
                 value_template: "{{ states(entity_id) in ['unknown', 'unavailable'] }}"
             sequence:
-              - action: script.tech_alert
+              - action: script.send_alert
                 data:
                   message: "Error: Entity '{{ entity_id }}' not found. Please check the entity ID."
                   level: warning
+                  channel: technical
         default:
           # Entity is valid, proceed with creation
           - action: script.add_threshold_alert
             data:
               entity_id: "{{ entity_id }}"
-              threshold: "{{ threshold }}"
-              condition: "{{ condition }}"
-              custom_message: "{{ message if message != '' else '' }}"
+              threshold: "{{ threshold if threshold != '' and threshold != '0' else '' }}"
+              condition: "{{ condition if threshold != '' and threshold != '0' else '' }}"
               offline_min: "{{ offline_delay if offline_delay != '' and offline_delay | int >= 0 else '' }}"
-          
+
           # Clear the form after successful creation
           - action: input_text.set_value
             target:
@@ -519,14 +407,9 @@ script:
               value: ""
           - action: input_text.set_value
             target:
-              entity_id: input_text.temp_threshold_message
-            data:
-              value: ""
-          - action: input_text.set_value
-            target:
               entity_id: input_text.temp_threshold_value
             data:
-              value: "20"
+              value: ""
           - action: input_text.set_value
             target:
               entity_id: input_text.temp_offline_min
@@ -552,29 +435,31 @@ script:
             data:
               value: ""
         else:
-          - action: script.tech_alert
+          - action: script.send_alert
             data:
               message: "Error: Please enter a valid entity ID to remove"
               level: warning
+              channel: technical
 
   list_threshold_alerts:
-    alias: "List Enhanced Threshold Alerts"
-    description: "Show all threshold alerts with offline delay information"
+    alias: "List Threshold Alerts"
+    description: "Show all configured threshold alerts"
     sequence:
-      - action: script.tech_alert
+      - action: script.send_alert
         data:
           message: |
-            ENHANCED THRESHOLD ALERTS
+            THRESHOLD ALERTS
 
             Global offline delay: {{ states('input_number.device_offline_delay_minutes') }} minutes
 
             Helper 1: {{ states('input_text.threshold_entities') or 'Empty' }}
-            Helper 2: {{ states('input_text.threshold_entities_2') or 'Empty' }}  
+            Helper 2: {{ states('input_text.threshold_entities_2') or 'Empty' }}
             Helper 3: {{ states('input_text.threshold_entities_3') or 'Empty' }}
 
-            Format: entity:threshold:condition:message:offline_min
-            (offline_min is optional - blank means use global)
+            Format: entity:threshold:condition:offline_min
+            Empty threshold/condition = offline monitoring only
           level: info
+          channel: technical
 
   clear_all_threshold_alerts:
     alias: "Clear All Threshold Alerts"
@@ -595,10 +480,11 @@ script:
           entity_id: input_text.threshold_entities_3
         data:
           value: ""
-      - action: script.tech_alert
+      - action: script.send_alert
         data:
           message: "All threshold alerts have been cleared"
           level: warning
+          channel: technical
 
   test_threshold_alert:
     alias: "Test Threshold Alert"
@@ -614,107 +500,6 @@ script:
           level: info
           channel: "{{ states('input_select.threshold_alert_channel') }}"
           location: "Test System"
-
-  validate_binary_automation_form:
-    alias: "Validate Binary Automation Form"
-    description: "Validate the binary sensor automation form inputs"
-    sequence:
-      - variables:
-          entity_id: "{{ states('input_text.binary_automation_entity') | trim }}"
-          message: "{{ states('input_text.binary_automation_message') | trim }}"
-          trigger_state: "{{ states('input_select.binary_automation_trigger_state') }}"
-          level: "{{ states('input_select.binary_automation_level') }}"
-          channel: "{{ states('input_select.binary_automation_channel') }}"
-          location: "{{ states('input_text.binary_automation_location') | trim }}"
-      
-      # Comprehensive validation checks
-      - choose:
-          # Check if entity ID is empty
-          - conditions:
-              - condition: template
-                value_template: "{{ entity_id == '' or entity_id == 'unavailable' or entity_id == 'unknown' }}"
-            sequence:
-              - action: script.tech_alert
-                data:
-                  message: "VALIDATION ERROR: Please enter a binary sensor entity ID"
-                  level: "warning"
-          
-          # Check if entity ID has correct format
-          - conditions:
-              - condition: template
-                value_template: "{{ '.' not in entity_id }}"
-            sequence:
-              - action: script.tech_alert
-                data:
-                  message: "VALIDATION ERROR: Entity ID must contain a dot (example: binary_sensor.front_door)"
-                  level: "warning"
-          
-          # Check if it's a binary sensor (not regular sensor)
-          - conditions:
-              - condition: template
-                value_template: "{{ not entity_id.startswith('binary_sensor.') }}"
-            sequence:
-              - action: script.tech_alert
-                data:
-                  message: "VALIDATION WARNING: Entity should start with 'binary_sensor.' not 'sensor.' - Use {{ entity_id.replace('sensor.', 'binary_sensor.') if entity_id.startswith('sensor.') else 'binary_sensor.' + entity_id.split('.')[-1] }}"
-                  level: "warning"
-          
-          # Check if entity exists in Home Assistant
-          - conditions:
-              - condition: template
-                value_template: "{{ states(entity_id) in ['unknown'] }}"
-            sequence:
-              - action: script.tech_alert
-                data:
-                  message: "VALIDATION ERROR: Entity '{{ entity_id }}' not found in Home Assistant. Check Developer Tools → States to verify the correct entity ID."
-                  level: "warning"
-          
-          # Check if message is empty
-          - conditions:
-              - condition: template
-                value_template: "{{ message == '' or message == 'unavailable' or message == 'unknown' }}"
-            sequence:
-              - action: script.tech_alert
-                data:
-                  message: "VALIDATION ERROR: Please enter an alert message"
-                  level: "warning"
-          
-          # Entity exists but is currently unavailable (warn but allow)
-          - conditions:
-              - condition: template
-                value_template: "{{ states(entity_id) in ['unavailable'] }}"
-            sequence:
-              - action: script.tech_alert
-                data:
-                  message: "VALIDATION WARNING: Entity '{{ entity_id }}' exists but is currently unavailable. The automation will still be created but may not work until the device comes online."
-                  level: "info"
-                  
-        # All validations passed - success message
-        default:
-          - variables:
-              entity_name: "{{ state_attr(entity_id, 'friendly_name') or entity_id.split('.')[1] | replace('_', ' ') | title }}"
-              current_state: "{{ states(entity_id) }}"
-              location_text: "{% if location %}{{ location }}{% else %}No location specified{% endif %}"
-          - action: script.tech_alert
-            data:
-              message: |
-                VALIDATION SUCCESS: Binary automation form is valid!
-
-                Configuration Summary:
-                • Entity: {{ entity_name }} ({{ entity_id }})
-                • Current State: {{ current_state }}
-                • Trigger: When state changes to "{{ trigger_state }}"
-                • Alert Level: {{ level }}
-                • Channel: {{ channel }}
-                • Location: {{ location_text }}
-                • Message: "{{ message }}"
-                
-                Next Steps:
-                1. Copy the generated YAML code below the form
-                2. Go to Settings → Automations & Scenes → Create Automation
-                3. Click the ⋮ menu → Edit in YAML
-                4. Paste the code and save your automation
-              level: "info"
 
   delayed_offline_alert:
     alias: "Delayed Offline Alert"
@@ -736,19 +521,19 @@ script:
           # Use passed delay or fall back to global setting
           final_delay: "{{ delay_minutes | int if delay_minutes is defined and delay_minutes != '' else states('input_number.device_offline_delay_minutes') | int }}"
           friendly_name: "{{ state_attr(entity_id, 'friendly_name') or entity_id.split('.')[1] | replace('_', ' ') | title }}"
-      
+
       # Only proceed if delay is greater than 0
       - condition: template
         value_template: "{{ final_delay > 0 }}"
-      
+
       # Wait for the delay
       - delay:
           minutes: "{{ final_delay }}"
-      
+
       # Check if device is still offline after delay
       - condition: template
         value_template: "{{ states(entity_id) in ['unavailable', 'unknown'] }}"
-      
+
       # Send the alert with custom delay indication
       - action: script.send_alert
         data:
@@ -758,80 +543,27 @@ script:
           location: "{{ friendly_name }}"
 
 # ===================================
-# BINARY SENSOR AUTOMATION GENERATOR
-# ===================================
-
-  clear_binary_automation_form:
-    alias: "Clear Binary Automation Form"
-    description: "Reset all form fields"
-    sequence:
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.binary_automation_entity
-        data:
-          value: ""
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.binary_automation_message
-        data:
-          value: ""
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.binary_automation_location
-        data:
-          value: ""
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.generated_automation_yaml
-        data:
-          value: ""
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.generated_automation_yaml_2
-        data:
-          value: ""
-      - action: input_text.set_value
-        target:
-          entity_id: input_text.generated_automation_yaml_3
-        data:
-          value: ""
-      - action: input_select.select_option
-        target:
-          entity_id: input_select.binary_automation_trigger_state
-        data:
-          option: "on"
-      - action: input_select.select_option
-        target:
-          entity_id: input_select.binary_automation_level
-        data:
-          option: "warning"
-      - action: input_select.select_option
-        target:
-          entity_id: input_select.binary_automation_channel
-        data:
-          option: "main"
-
-# ===================================
 # INPUT HELPERS
 # ===================================
 
 input_text:
-  # Threshold alert storage helpers - REMOVED initial: "" to preserve data across reboots
-  # Enhanced threshold storage helpers with multiline support
+  # Threshold alert storage helpers
+  # Format: entity:threshold:condition:offline_min
+  # For offline-only monitoring: entity:::offline_min
   threshold_entities:
     name: "Threshold Alert Entities"
     max: 255
-    mode: text          # This makes it a textarea instead of single line
-    
+    mode: text
+
   threshold_entities_2:
     name: "Threshold Alert Entities (Group 2)"
     max: 255
-    mode: text          # This makes it a textarea instead of single line
-    
+    mode: text
+
   threshold_entities_3:
     name: "Threshold Alert Entities (Group 3)"
     max: 255
-    mode: text          # This makes it a textarea instead of single line
+    mode: text
 
   temp_offline_min:
     name: "Temporary Offline Delay (minutes)"
@@ -847,32 +579,11 @@ input_text:
 
   temp_threshold_value:
     name: "Temporary Threshold Value"
-    initial: "20"
-    max: 20
-
-  temp_threshold_message:
-    name: "Temporary Threshold Message"
     initial: ""
-    max: 200
+    max: 20
 
   temp_remove_entity:
     name: "Temporary Remove Entity"
-    initial: ""
-    max: 100
-
-  # Binary automation form helpers
-  binary_automation_entity:
-    name: "Binary Automation Entity"
-    initial: ""
-    max: 100
-
-  binary_automation_message:
-    name: "Binary Automation Message"
-    initial: ""
-    max: 200
-
-  binary_automation_location:
-    name: "Binary Automation Location"
     initial: ""
     max: 100
 
@@ -897,34 +608,8 @@ input_select:
     options:
       - "above"
       - "below"
+      - "offline only"
     initial: "above"
-
-  binary_automation_level:
-    name: "Binary Automation Alert Level"
-    options:
-      - info
-      - warning
-      - critical
-    initial: "warning"
-    icon: mdi:alert
-
-  binary_automation_channel:
-    name: "Binary Automation Alert Channel"
-    options:
-      - main
-      - technical
-      - both
-    initial: "technical"
-    icon: mdi:message-alert
-
-  binary_automation_trigger_state:
-    name: "Binary Automation Trigger State"
-    options:
-      - "on"
-      - "off"
-      - "Device Offline"
-    initial: "on"
-    icon: mdi:state-machine
 
 input_number:
   device_offline_delay_minutes:
@@ -951,11 +636,6 @@ template:
         unique_id: "pkg_threshold_alert_status"
         state: "{% if is_state('input_boolean.threshold_alerts_enabled', 'on') %}{% set count = states('sensor.threshold_alert_count') | int %}{% if count > 0 %}Monitoring {{ count }} entities{% else %}No entities configured{% endif %}{% else %}Disabled{% endif %}"
         icon: mdi:shield-check
-
-      - name: "Binary Automation Form Status"
-        unique_id: "pkg_binary_automation_form_status"
-        state: "{% set entity = states('input_text.binary_automation_entity') %}{% set message = states('input_text.binary_automation_message') %}{% if entity != '' and entity != 'unknown' and message != '' and message != 'unknown' %}{% if states(entity) not in ['unknown', 'unavailable'] %}Ready to generate{% else %}Invalid entity{% endif %}{% else %}Fill required fields{% endif %}"
-        icon: mdi:form-select
 
 # ===================================
 # AUTOMATIONS
@@ -1010,7 +690,7 @@ automation:
               {% endif %}
             {% endfor %}
             {{ found_delay if found_delay != '' else states('input_number.device_offline_delay_minutes')|int }}
-      
+
       # Handle device going offline - use device-specific or global delay
       - if:
           - condition: template
@@ -1035,7 +715,7 @@ automation:
                   entity_id: "{{ triggered_entity }}"
                   initial_state: "{{ new_state }}"
                   delay_minutes: "{{ device_specific_delay }}"
-      
+
       # Handle device coming back online (immediate alert)
       - if:
           - condition: template
@@ -1051,8 +731,8 @@ automation:
               level: "info"
               channel: "technical"
               location: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
-      
-      # Process threshold logic only if both states are numeric (unchanged)
+
+      # Process threshold logic only if both states are numeric
       - if:
           - condition: template
             value_template: "{{ new_is_number and old_is_number }}"
@@ -1062,13 +742,13 @@ automation:
               sequence:
                 - if:
                     - condition: template
-                      value_template: "{{ repeat.item != '' and repeat.item.startswith(triggered_entity + ':') }}"
+                      value_template: "{{ repeat.item != '' and repeat.item.startswith(triggered_entity + ':') and repeat.item.split(':')[1] != '' }}"
                   then:
                     - variables:
                         parts: "{{ repeat.item.split(':') }}"
                         threshold_value: "{{ parts[1] | float }}"
                         condition_type: "{{ parts[2] }}"
-                        alert_message: "{{ parts[3] if parts | length > 3 else 'Threshold alert' }}"
+                        friendly_name: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
                         current_val: "{{ new_state | float }}"
                         old_val: "{{ old_state | float }}"
                         threshold_crossed: "{% if condition_type == 'above' %}{{ current_val > threshold_value and old_val <= threshold_value }}{% else %}{{ current_val < threshold_value and old_val >= threshold_value }}{% endif %}"
@@ -1083,187 +763,10 @@ automation:
                             threshold_clean: "{% if threshold_value == (threshold_value | int) %}{{ threshold_value | int }}{% else %}{{ threshold_value | round(1) }}{% endif %}"
                         - action: script.send_alert
                           data:
-                            message: "{{ alert_message }}\nCurrent: {{ current_clean }}{{ unit_text }}\nThreshold: {{ condition_type }} {{ threshold_clean }}{{ unit_text }}"
+                            message: "{{ friendly_name }} is {{ condition_type }} {{ threshold_clean }}{{ unit_text }}\nCurrent value: {{ current_clean }}{{ unit_text }}"
                             level: warning
                             channel: "{{ states('input_select.threshold_alert_channel') }}"
-                            location: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
-
-  - alias: Saturday Morning Status Report Example
-    id: status_report_template
-    description: >-
-      Send weekly status report every Saturday at 10am using bulk alerts with real
-      sensor data
-    triggers:
-      - at: "11:00:00"
-        trigger: time
-        weekday:
-          - sat
-    conditions: []
-    actions:
-      - data:
-          alerts:
-            - message: Saturday Morning Report - {{ now().strftime('%B %d, %Y') }}
-              level: info
-              channel: main
-            - message: >-
-                Current {{ state_attr('sensor.temperature', 'friendly_name') or
-                'Temperature' }}: {{ states('sensor.temperature') }}{{
-                state_attr('sensor.temperature', 'unit_of_measurement') or '°C' }}
-              level: info
-              location: Climate
-              channel: main
-            - message: >-
-                Current {{ state_attr('sensor.humidity', 'friendly_name') or
-                'Humidity' }}: {{ states('sensor.humidity') }}{{
-                state_attr('sensor.humidity', 'unit_of_measurement') or '%' }}
-              level: "{{ 'warning' if states('sensor.humidity')|float > 70 else 'info' }}"
-              location: Climate
-              channel: main
-            - message: >-
-                {{ state_attr('sensor.uptime', 'friendly_name') or 'System' }}
-                uptime: {{ states('sensor.uptime') }} days
-              level: info
-              location: System
-              channel: technical
-            - message: >-
-                Yesterday's energy usage: {{ state_attr('sensor.energy_daily',
-                'friendly_name') or 'Energy Monitor' }} - {{
-                states('sensor.energy_daily') }}{{ state_attr('sensor.energy_daily',
-                'unit_of_measurement') or ' kWh' }}
-              level: >-
-                {{ 'warning' if states('sensor.energy_daily')|float > 50 else 'info'
-                }}
-              location: Energy Monitor
-              channel: main
-            - message: Have a great Saturday!
-              level: info
-              channel: main
-        action: script.bulk_alert
-    mode: single
-
-  - alias: "Complex Threshold Alert with Auto-Location Example"
-    description: "Advanced threshold alert with friendly names, values, units, and automatic location detection"
-    trigger:
-      - platform: numeric_state
-        entity_id: sensor.living_room_temperature  # Replace with your sensor
-        above: 25  # Replace with your threshold value
-        for: "00:02:00"  # Optional: Wait 2 minutes before alerting (prevents flapping)
-      - platform: numeric_state
-        entity_id: sensor.bedroom_humidity  # Replace with your sensor  
-        above: 70  # Replace with your threshold value
-        for: "00:05:00"  # Optional: Wait 5 minutes before alerting
-      - platform: numeric_state
-        entity_id: sensor.basement_temperature  # Replace with your sensor
-        below: 15  # Replace with your threshold value
-        for: "00:01:00"  # Optional: Wait 1 minute before alerting
-    condition:
-      # Optional: Only alert during certain times or conditions
-      - condition: time
-        after: "06:00:00"
-        before: "23:00:00"
-      # Optional: Only alert when someone is home
-      # - condition: state
-      #   entity_id: group.all_people
-      #   state: "home"
-    action:
-      - variables:
-          # Entity information
-          triggered_entity: "{{ trigger.entity_id }}"
-          entity_friendly_name: "{{ state_attr(trigger.entity_id, 'friendly_name') or trigger.entity_id.split('.')[1] | replace('_', ' ') | title }}"
-          
-          # Current state and formatting
-          current_state: "{{ trigger.to_state.state }}"
-          previous_state: "{{ trigger.from_state.state }}"
-          unit_of_measurement: "{{ state_attr(trigger.entity_id, 'unit_of_measurement') }}"
-          unit_text: "{% if unit_of_measurement %}{{ unit_of_measurement }}{% else %}{% endif %}"
-          
-          # Format numbers nicely (remove unnecessary decimals)
-          current_value_clean: "{% if current_state | float == current_state | float | int %}{{ current_state | float | int }}{% else %}{{ current_state | float | round(1) }}{% endif %}"
-          previous_value_clean: "{% if previous_state | float == previous_state | float | int %}{{ previous_state | float | int }}{% else %}{{ previous_state | float | round(1) }}{% endif %}"
-          
-          # Determine threshold information based on trigger
-          threshold_value: >
-            {% if trigger.platform == 'numeric_state' and trigger.above is defined %}
-              {{ trigger.above }}
-            {% elif trigger.platform == 'numeric_state' and trigger.below is defined %}
-              {{ trigger.below }}
-            {% else %}
-              Unknown
-            {% endif %}
-          
-          threshold_condition: >
-            {% if trigger.platform == 'numeric_state' and trigger.above is defined %}
-              above
-            {% elif trigger.platform == 'numeric_state' and trigger.below is defined %}
-              below
-            {% else %}
-              unknown condition
-            {% endif %}
-          
-          threshold_clean: "{% if threshold_value != 'Unknown' and threshold_value | float == threshold_value | float | int %}{{ threshold_value | float | int }}{% else %}{{ threshold_value | float | round(1) if threshold_value != 'Unknown' else 'Unknown' }}{% endif %}"
-          
-          # Determine alert level based on how far from threshold
-          threshold_difference: "{{ (current_state | float - threshold_value | float) | abs if threshold_value != 'Unknown' else 0 }}"
-          alert_level: >
-            {% if threshold_difference | float > (threshold_value | float * 0.2) %}
-              critical
-            {% elif threshold_difference | float > (threshold_value | float * 0.1) %}
-              warning
-            {% else %}
-              info
-            {% endif %}
-          
-          # Create rich alert message
-          alert_message: >
-            THRESHOLD ALERT: {{ entity_friendly_name }}
-
-            Current: {{ current_value_clean }}{{ unit_text }} (was {{ previous_value_clean }}{{ unit_text }})
-            Threshold: {{ threshold_condition }} {{ threshold_clean }}{{ unit_text }}
-            Change: {{ ((current_state | float - previous_state | float) | round(1)) }}{{ unit_text }}
-            {% if threshold_difference | float > 0 %}
-            Exceeded by: {{ threshold_difference | round(1) }}{{ unit_text }}
-            {% endif %}
-          
-          # Determine appropriate channel based on severity
-          alert_channel: >
-            {% if alert_level == 'critical' %}
-              both
-            {% elif triggered_entity.startswith('sensor.') and 'temperature' in triggered_entity %}
-              main
-            {% else %}
-              technical
-            {% endif %}
-      
-      - action: script.send_alert
-        data:
-          message: "{{ alert_message }}"
-          level: "{{ alert_level }}"
-          channel: "{{ alert_channel }}"
-          entity_id: "{{ triggered_entity }}"  # Auto-location will be determined from this
-          include_timestamp: true
-
-      # Optional: Send additional notification for critical alerts
-      - if:
-          - condition: template
-            value_template: "{{ alert_level == 'critical' }}"
-        then:
-          - delay:
-              seconds: 30
-          - action: script.send_alert
-            data:
-              message: "CRITICAL FOLLOW-UP: {{ entity_friendly_name }} remains at {{ current_value_clean }}{{ unit_text }} (threshold: {{ threshold_condition }} {{ threshold_clean }}{{ unit_text }})"
-              level: "critical"
-              channel: "both"
-              entity_id: "{{ triggered_entity }}"
-
-      # Optional: Log detailed information for troubleshooting
-      - action: system_log.write
-        data:
-          message: "Threshold alert triggered: {{ entity_friendly_name }} = {{ current_value_clean }}{{ unit_text }}, threshold = {{ threshold_condition }} {{ threshold_clean }}{{ unit_text }}, location = {{ area_name(triggered_entity) or 'No area assigned' }}"
-          level: warning
-
-    mode: single  # Prevent multiple instances of same automation
-    max_exceeded: silent  # Don't log if automation is already running
+                            location: "{{ friendly_name }}"
 
 # ===================================
 # END OF ALERT SYSTEM PACKAGE
