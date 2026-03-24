@@ -445,19 +445,37 @@ script:
     alias: "List Threshold Alerts"
     description: "Show all configured threshold alerts"
     sequence:
+      - variables:
+          all_content: "{{ states('input_text.threshold_entities') }}|{{ states('input_text.threshold_entities_2') }}|{{ states('input_text.threshold_entities_3') }}"
+          alert_list: >
+            {% set entries = all_content.split('|') | reject('eq', '') | list %}
+            {% if entries | length == 0 %}
+            No alerts configured.
+            {% else %}
+            {% for entry in entries %}
+            {% set parts = entry.split(':') %}
+            {% set entity = parts[0] %}
+            {% set name = state_attr(entity, 'friendly_name') or entity.split('.')[1] | replace('_', ' ') | title %}
+            {% set threshold = parts[1] if parts | length > 1 else '' %}
+            {% set condition = parts[2] if parts | length > 2 else '' %}
+            {% set delay = parts[3] if parts | length > 3 else '' %}
+            {% set unit = state_attr(entity, 'unit_of_measurement') or '' %}
+            {% if threshold != '' and condition != '' %}
+            - {{ name }}: {{ condition }} {{ threshold }}{{ ' ' + unit if unit else '' }}{% if delay %} (offline: {{ delay }}min){% endif %}
+
+            {% else %}
+            - {{ name }}: offline monitoring only{% if delay %} ({{ delay }}min delay){% endif %}
+
+            {% endif %}
+            {% endfor %}
+            {% endif %}
       - action: script.send_alert
         data:
-          message: |
-            THRESHOLD ALERTS
+          message: >
+            CONFIGURED ALERTS ({{ all_content.split('|') | reject('eq', '') | list | length }})
+            Global offline delay: {{ states('input_number.device_offline_delay_minutes') }} min
 
-            Global offline delay: {{ states('input_number.device_offline_delay_minutes') }} minutes
-
-            Helper 1: {{ states('input_text.threshold_entities') or 'Empty' }}
-            Helper 2: {{ states('input_text.threshold_entities_2') or 'Empty' }}
-            Helper 3: {{ states('input_text.threshold_entities_3') or 'Empty' }}
-
-            Format: entity:threshold:condition:offline_min
-            Empty threshold/condition = offline monitoring only
+            {{ alert_list }}
           level: info
           channel: technical
 
