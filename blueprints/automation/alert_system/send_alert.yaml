@@ -1,0 +1,83 @@
+blueprint:
+  name: "Send Alert on Entity State Change"
+  description: "Create an automation that sends an alert when an entity changes state. Works with binary sensors, sensors, switches, or any entity type."
+  domain: automation
+
+  input:
+    entity:
+      name: "Entity"
+      description: "The entity to monitor"
+      selector:
+        entity: {}
+
+    trigger_state:
+      name: "Trigger State"
+      description: "The state that triggers the alert (e.g. 'on', 'off', 'unavailable', 'home', 'not_home', or any custom value)"
+      selector:
+        text: {}
+
+    message:
+      name: "Alert Message"
+      description: "The message to send when triggered"
+      selector:
+        text:
+          multiline: false
+
+    level:
+      name: "Alert Level"
+      description: "Severity of the alert"
+      default: "warning"
+      selector:
+        select:
+          options:
+            - "info"
+            - "warning"
+            - "critical"
+
+    channel:
+      name: "Alert Channel"
+      description: "Where to send the alert"
+      default: "main"
+      selector:
+        select:
+          options:
+            - "main"
+            - "technical"
+            - "both"
+
+    location:
+      name: "Location"
+      description: "Optional location override (leave empty to auto-detect from entity area)"
+      default: ""
+      selector:
+        text: {}
+
+    duration:
+      name: "Duration Before Alert"
+      description: "How long the entity must stay in the trigger state before alerting (prevents flapping). Set to 0 for immediate."
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 60
+          step: 1
+          unit_of_measurement: "minutes"
+
+trigger:
+  - platform: state
+    entity_id: !input entity
+    to: !input trigger_state
+    for:
+      minutes: !input duration
+
+action:
+  - action: script.send_alert
+    data:
+      message: !input message
+      level: !input level
+      channel: !input channel
+      location: !input location
+      entity_id: "{{ trigger.entity_id }}"
+      include_timestamp: true
+
+mode: single

@@ -49,6 +49,22 @@ else
 fi
 
 ########################
+# Update blueprint
+########################
+mkdir -p /config/blueprints/automation/alert_system/
+
+echo "Downloading latest send_alert blueprint from GitHub..."
+wget -O /config/blueprints/automation/alert_system/send_alert.yaml.tmp https://raw.githubusercontent.com/BackyardBird/ha-alert-system/main/blueprints/automation/alert_system/send_alert.yaml
+
+if [ $? -eq 0 ]; then
+    mv /config/blueprints/automation/alert_system/send_alert.yaml.tmp /config/blueprints/automation/alert_system/send_alert.yaml
+    echo "Successfully updated send_alert blueprint"
+else
+    echo "Failed to download blueprint (non-critical)"
+    rm -f /config/blueprints/automation/alert_system/send_alert.yaml.tmp
+fi
+
+########################
 # Final notes
 ########################
 echo "🔄 Restart Home Assistant to apply changes"

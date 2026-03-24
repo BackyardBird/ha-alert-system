@@ -786,6 +786,30 @@ automation:
                             channel: "{{ states('input_select.threshold_alert_channel') }}"
                             location: "{{ friendly_name }}"
 
+  # Template automation - duplicate and customize for each new alert
+  # To use: copy this block in HA UI (Settings > Automations > Create),
+  # switch to YAML mode, paste, then edit the values.
+  - alias: "TEMPLATE - Alert on State Change"
+    id: "alert_template_do_not_enable"
+    description: "Template automation - duplicate this for new alerts. Do not enable directly."
+    trigger:
+      - platform: state
+        entity_id: sensor.CHANGE_ME          # The entity to monitor
+        to: "CHANGE_ME"                      # State that triggers alert (e.g. on, off, unavailable)
+        for:
+          minutes: 0                         # Delay before alerting (0 = immediate)
+    condition: []
+    action:
+      - action: script.send_alert
+        data:
+          message: "CHANGE_ME"               # Your alert message
+          level: "warning"                   # info, warning, or critical
+          channel: "main"                    # main, technical, or both
+          entity_id: "{{ trigger.entity_id }}" # Auto-detects location from entity area
+          include_timestamp: true
+    mode: single
+    initial_state: false                     # Disabled by default - enable after customizing
+
 # ===================================
 # END OF ALERT SYSTEM PACKAGE
 # ===================================
