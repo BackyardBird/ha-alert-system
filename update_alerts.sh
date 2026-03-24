@@ -1,8 +1,29 @@
 #!/bin/bash
 # Home Assistant Alert System Updater
-# Updates the alert system package + dashboard file from GitHub
+# Updates the alert system package + dashboard + blueprint + itself from GitHub
 
-echo "🔄 Updating Home Assistant Alert System..."
+echo "Updating Home Assistant Alert System..."
+
+########################
+# Self-update
+########################
+echo "Checking for update script changes..."
+wget -qO /config/update_alerts.sh.tmp https://raw.githubusercontent.com/BackyardBird/ha-alert-system/main/update_alerts.sh
+
+if [ $? -eq 0 ]; then
+    if ! cmp -s /config/update_alerts.sh /config/update_alerts.sh.tmp; then
+        mv /config/update_alerts.sh.tmp /config/update_alerts.sh
+        chmod +x /config/update_alerts.sh
+        echo "Update script was updated. Re-running..."
+        exec /config/update_alerts.sh
+    else
+        rm -f /config/update_alerts.sh.tmp
+        echo "Update script is current."
+    fi
+else
+    rm -f /config/update_alerts.sh.tmp
+    echo "Could not check for script updates (non-critical)."
+fi
 
 ########################
 # Update alert_system.yaml (in packages)
