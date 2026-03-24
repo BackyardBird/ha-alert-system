@@ -7,30 +7,27 @@
 
 **Everything you need to do to get the alert system working:**
 
-1. **Create Telegram Bot** via @BotFather → Get bot token
-2. **Create Telegram Groups** (2 groups: Main Alerts + Technical Alerts) → Get Chat IDs  
-3. **Configure Home Assistant Telegram Integration** → Add bot token and Chat IDs
-4. **Update configuration.yaml** → Add packages directory and Lovelace dashboard
-5. **Create directories** → `/config/packages/` and `/config/lovelace/`
-6. **Download package files** → `alert_system.yaml` and `alert_system_dash.yaml`
-7. **Configure secrets.yaml** → Add house name and Chat IDs
-8. **Create update script** → `update_alerts.sh` for easy updates
-9. **Restart Home Assistant** and test
+1. **Create Telegram Bot** via @BotFather - Get bot token
+2. **Create Telegram Groups** (2 groups: Main Alerts + Technical Alerts) - Get Chat IDs
+3. **Configure Home Assistant Telegram Integration** - Add bot token and Chat IDs
+4. **Update configuration.yaml** - Add packages directory and Lovelace dashboard
+5. **Create directories** - `/config/packages/` and `/config/lovelace/`
+6. **Download package files** - Run `update_alerts.sh`
+7. **Configure secrets.yaml** - Add house name and Chat IDs
+8. **Restart Home Assistant** and test
 
 **For multiple houses:** Repeat steps 2-3 and 7 for each additional house using the same bot token.
-
-*Detailed instructions for each step are in the [Implementation Guide](#implementation-guide) section.*
 
 ---
 
 ## Table of Contents
 
 1. [System Overview](#system-overview)
-2. [Implementation Guide](#implementation-guide) 
+2. [Implementation Guide](#implementation-guide)
 3. [Testing Your Setup](#testing-your-setup)
 4. [Using Alert Scripts](#using-alert-scripts)
 5. [Creating Automations with Alerts](#creating-automations-with-alerts)
-6. [Using the Lovelace Cards](#using-the-lovelace-cards)
+6. [Using the Dashboard](#using-the-dashboard)
 7. [Essential Security](#essential-security)
 8. [Maintenance & Updates](#maintenance--updates)
 9. [Troubleshooting](#troubleshooting)
@@ -44,27 +41,30 @@
 The Home Assistant Alert System provides intelligent Telegram notifications with dual-channel routing:
 
 - **Main Channel**: Family-friendly notifications ("Dishwasher finished", "Pool temperature ready")
-- **Technical Channel**: System administration alerts ("Low disk space", "Device offline") 
+- **Technical Channel**: System administration alerts ("Low disk space", "Device offline")
 - **Security Alerts**: Always sent to both channels ("Motion detected when away")
 
 ### Key Features
 
-- **9 Alert Scripts**: From simple `quick_alert` to advanced `bulk_alert`
-- **Threshold Monitoring**: Automatic alerts when sensors exceed configured limits
-- **Device Monitoring**: Alerts when devices go offline/online
-- **Lovelace Dashboard**: Visual interface for managing alerts and generating automations
+- **5 Alert Scripts**: From simple `send_alert` to `bulk_alert` for status reports
+- **Threshold Monitoring**: Automatic alerts when sensors exceed configured limits, with auto-generated messages
+- **Offline Monitoring**: Monitor device availability without requiring a threshold
+- **Blueprint**: UI-driven form for creating custom alert automations
+- **Lovelace Dashboard**: Visual interface for managing threshold alerts
 - **Multi-House Support**: One bot can serve multiple houses with separate channels
 
 ### Architecture
 
 ```
-GitHub Repository (Optional)
-       ↓
+GitHub Repository
+       |
+  update_alerts.sh (self-updating)
+       |
 Home Assistant Package
-       ↓
-   Alert Scripts
-       ↓
-  Telegram Bot → Main Group + Technical Group
+       |
+   Alert Scripts + Threshold Monitor
+       |
+  Telegram Bot - Main Group + Technical Group
 ```
 
 ---
@@ -73,28 +73,28 @@ Home Assistant Package
 
 ### Prerequisites
 
-- Home Assistant with packages support
-- Telegram account 
+- Home Assistant 2026.3+ with packages support
+- Telegram account
 - Internet access for downloading files
 
 ### Step 1: Create Telegram Bot and Groups
 
-1. **Create Bot**: 
+1. **Create Bot**:
    - Message @BotFather on Telegram
    - Send `/newbot` and follow prompts
    - Save the bot token (looks like `123456789:ABCdefGhIJklmNoPQRsTUVwxyZ`)
 
 2. **Create Groups**:
    - Create "House Main Alerts" group
-   - Create "House Technical Alerts" group  
+   - Create "House Technical Alerts" group
    - Add your bot to both groups as admin
    - Get Chat IDs using @getidsbot (will look like `-1001234567890`)
 
 ### Step 2: Configure Home Assistant Telegram Integration
 
 1. **Add Integration**:
-   - Settings → Devices & Services → Add Integration
-   - Search "Telegram Bot" → Configure
+   - Settings > Devices & Services > Add Integration
+   - Search "Telegram Bot" > Configure
    - Platform: Broadcast
    - API Key: Your bot token
 
@@ -129,7 +129,6 @@ telegram_technical_alerts: "-1001234567891"
 
 ### Step 4: Create Directory Structure
 
-Create these directories in your Home Assistant config:
 ```bash
 mkdir -p /config/packages/
 mkdir -p /config/lovelace/
@@ -137,25 +136,29 @@ mkdir -p /config/lovelace/
 
 ### Step 5: Download Package Files
 
-**Option A: Manual Download**
-1. Download `alert_system.yaml` to `/config/packages/`
-2. Download `alert_system_dash.yaml` to `/config/lovelace/`
+```bash
+# Download the update script
+wget -O /config/update_alerts.sh https://raw.githubusercontent.com/BackyardBird/ha-alert-system/main/update_alerts.sh
+chmod +x /config/update_alerts.sh
 
-**Option B: Create Update Script** (Recommended)
+# Download all files (package, dashboard, blueprint)
+/config/update_alerts.sh
+```
 
-Create `/config/update_alerts.sh`
+### Step 6: Restart and Test
 
-Make executable: `chmod +x /config/update_alerts.sh`
-
-### Step 6: First Installation
-
-Run the update script or manually place the files, then restart Home Assistant.
+Restart Home Assistant, then run a test:
+```yaml
+action: script.test_alert
+data:
+  channel: "both"
+```
 
 ### Multi-House Setup
 
 For additional houses:
 1. **Repeat Steps 2-3**: Configure Telegram integration with same bot token
-2. **Create new groups** for the additional house  
+2. **Create new groups** for the additional house
 3. **Update secrets.yaml** with the new house name and Chat IDs
 4. **Use same package files** - they automatically adapt to each house's secrets
 
@@ -165,7 +168,6 @@ For additional houses:
 
 ### Basic Connectivity Test
 
-Test both channels:
 ```yaml
 action: script.test_alert
 data:
@@ -176,21 +178,24 @@ data:
 
 **Main channel only:**
 ```yaml
-action: script.main_alert
+action: script.send_alert
 data:
   message: "Main channel test"
+  level: "info"
+  channel: "main"
 ```
 
 **Technical channel only:**
 ```yaml
-action: script.tech_alert
+action: script.send_alert
 data:
   message: "Technical channel test"
+  level: "info"
+  channel: "technical"
 ```
 
 ### Full Feature Test
 
-Test all features at once:
 ```yaml
 action: script.send_alert
 data:
@@ -204,63 +209,62 @@ data:
 
 - **Both channels**: Identical messages in both Telegram groups
 - **Single channels**: Message appears only in specified group
-- **Formatting**: Bold text, emojis, and location display correctly
-- **Header format**: `🚨 YOURHOUSENAME WARNING 14:30`
+- **Formatting**: Bold text and location display correctly
+- **Header format**: `YOURHOUSENAME WARNING 14:30`
 
 ---
 
 ## Using Alert Scripts
 
-### Core Alert Scripts
+### Available Scripts
 
-| Script | Purpose | Default Channel | Example Usage |
-|--------|---------|----------------|---------------|
-| `test_alert` | System verification | Both | System testing |
-| `quick_alert` | Simple notifications | Main | "Dishwasher finished" |
-| `send_alert` | Full-featured alerts | Configurable | Complete control |
-| `system_alert` | Technical issues | Technical | "High CPU usage" |
-| `security_alert` | Security events | Both (forced) | "Motion detected" |
-| `device_alert` | Device notifications | Technical | "Battery low" |
-| `bulk_alert` | Multiple alerts | Mixed | Status reports |
-| `tech_alert` | Technical convenience | Technical | Quick tech alerts |
-| `main_alert` | Household convenience | Main | Quick main alerts |
+| Script | Purpose | Default Channel |
+|--------|---------|----------------|
+| `send_alert` | Full-featured alerts | Configurable |
+| `system_alert` | Technical issues | Technical |
+| `security_alert` | Security events | Both (forced) |
+| `bulk_alert` | Multiple alerts | Mixed |
+| `test_alert` | System verification | Both |
 
 ### Alert Script Parameters
 
-**Common parameters across scripts:**
+**`send_alert` parameters:**
 - **message**: Alert content (required)
-- **level**: `info`, `warning`, or `critical` 
+- **level**: `info`, `warning`, or `critical` (default: info)
+- **channel**: `main`, `technical`, or `both` (default: main)
 - **location**: Manual location override (optional)
 - **entity_id**: For automatic location detection (optional)
-- **channel**: `main`, `technical`, or `both`
+- **include_timestamp**: true/false (default: true)
 - **chat_id**: Direct message to specific chat (optional)
 
 **Automatic Location Detection:**
 - When `entity_id` is provided but `location` is empty, location is automatically filled from the entity's Home Assistant area assignment
 - Manual `location` always takes priority over auto-detected location
-- Entities not assigned to areas will show no location
 
 ### Alert Levels
 
-- **info** (ℹ️): General information, completions, status updates
-- **warning** (⚠️): Issues requiring attention but not critical  
-- **critical** (🚨): Urgent issues requiring immediate action
+- **info**: General information, completions, status updates
+- **warning**: Issues requiring attention but not critical
+- **critical**: Urgent issues requiring immediate action
 
-### Common Usage Examples
+### Usage Examples
 
-**Simple household notification:**
+**Simple notification to main channel:**
 ```yaml
-action: script.quick_alert
+action: script.send_alert
 data:
   message: "Dishwasher cycle completed"
+  level: "info"
+  channel: "main"
 ```
 
 **Technical alert with location:**
 ```yaml
-action: script.tech_alert
+action: script.send_alert
 data:
   message: "Disk space low"
   level: "warning"
+  channel: "technical"
   location: "Server Rack"
 ```
 
@@ -272,19 +276,7 @@ data:
   location: "Living Room"
 ```
 
-**Complete control with all options:**
-```yaml
-action: script.send_alert
-data:
-  message: "Custom alert with all options"
-  level: "critical"
-  channel: "both"
-  location: "Kitchen"  # Manual location (takes priority)
-  entity_id: "sensor.kitchen_temperature"  # For auto-location if location empty
-  include_timestamp: true
-```
-
-**Automatic location detection:**
+**Alert with auto-location from entity:**
 ```yaml
 action: script.send_alert
 data:
@@ -292,20 +284,18 @@ data:
   level: "warning"
   channel: "main"
   entity_id: "sensor.living_room_temperature"
-  # Location automatically filled from entity's Home Assistant area
 ```
 
 ### Bulk Alerts for Status Reports
 
-Perfect for daily/weekly status reports:
 ```yaml
 action: script.bulk_alert
 data:
   alerts:
-    - message: "🌅 Daily Status Report"
-      level: "info" 
+    - message: "Daily Status Report"
+      level: "info"
       channel: "main"
-    - message: "Temperature: {{ states('sensor.temperature') }}°C"
+    - message: "Temperature: {{ states('sensor.temperature') }}C"
       level: "info"
       location: "Climate"
       channel: "main"
@@ -319,29 +309,42 @@ data:
 
 ## Creating Automations with Alerts
 
-### Basic Automation Template
+### Option 1: Blueprint (Recommended)
 
+The easiest way to create alert automations:
+
+1. Go to **Settings > Automations > Create Automation > Use Blueprint**
+2. Select **"Send Alert on Entity State Change"**
+3. Fill in the form:
+   - **Entity**: Pick from your entity list
+   - **Trigger State**: What state triggers the alert (e.g. "on", "off", "unavailable")
+   - **Message**: Your alert message
+   - **Level**: info, warning, or critical
+   - **Channel**: main, technical, or both
+   - **Location**: Optional (auto-detects from entity area if empty)
+   - **Duration**: How long the state must persist before alerting (prevents flapping)
+4. Save and enable
+
+### Option 2: YAML Automations
+
+**Basic template:**
 ```yaml
 alias: "My Alert Automation"
-description: "Send alert when condition is met"
 trigger:
   - platform: state
     entity_id: sensor.your_sensor
-    # Add your trigger conditions
-condition: []
+    to: "on"
 action:
   - action: script.send_alert
     data:
-      message: "Your alert message here"
+      message: "Your alert message"
       level: "warning"
       channel: "main"
-      location: "Location Name"
+      entity_id: "{{ trigger.entity_id }}"
 mode: single
 ```
 
-### Practical Examples
-
-**Low battery alert with automatic location:**
+**Low battery alert:**
 ```yaml
 alias: "Low Battery Alert"
 trigger:
@@ -349,31 +352,32 @@ trigger:
     entity_id: sensor.phone_battery
     below: 20
 action:
-  - action: script.device_alert
+  - action: script.send_alert
     data:
-      device_name: "{{ state_attr(trigger.entity_id, 'friendly_name') }}"
-      message: "Battery low ({{ trigger.to_state.state }}%)"
+      message: "{{ state_attr(trigger.entity_id, 'friendly_name') }} battery low ({{ trigger.to_state.state }}%)"
       level: "warning"
-      entity_id: "{{ trigger.entity_id }}"  # Auto-detects location from entity area
+      channel: "technical"
+      entity_id: "{{ trigger.entity_id }}"
 ```
 
-**Door left open alert with automatic location:**
+**Door left open:**
 ```yaml
 alias: "Front Door Open Too Long"
 trigger:
   - platform: state
     entity_id: binary_sensor.front_door
     to: "on"
-    for: "00:10:00"  # 10 minutes
+    for: "00:10:00"
 action:
-  - action: script.main_alert
+  - action: script.send_alert
     data:
       message: "Front door has been open for 10 minutes"
       level: "warning"
-      entity_id: "{{ trigger.entity_id }}"  # Auto-detects location from entity area
+      channel: "main"
+      entity_id: "{{ trigger.entity_id }}"
 ```
 
-**System monitoring:**
+**High CPU alert:**
 ```yaml
 alias: "High CPU Alert"
 trigger:
@@ -388,12 +392,12 @@ action:
       level: "critical"
 ```
 
-**Away mode security with automatic location:**
+**Away mode security:**
 ```yaml
 alias: "Motion When Away"
 trigger:
   - platform: state
-    entity_id: binary_sensor.living_room_motion  
+    entity_id: binary_sensor.living_room_motion
     to: "on"
 condition:
   - condition: state
@@ -403,36 +407,23 @@ action:
   - action: script.security_alert
     data:
       message: "Motion detected when house is empty"
-      entity_id: "{{ trigger.entity_id }}"  # Auto-detects location from entity area
+      entity_id: "{{ trigger.entity_id }}"
 ```
 
 ### Setting Up Areas for Automatic Location
 
-To take advantage of automatic location detection, assign your entities to Home Assistant areas:
+Assign your entities to Home Assistant areas for automatic location detection:
 
-1. **Go to Settings → Areas & Zones**
+1. **Go to Settings > Areas & Zones**
 2. **Create areas**: "Living Room", "Kitchen", "Bedroom", etc.
-3. **Assign devices to areas**: 
-   - Settings → Devices & Services → Devices
-   - Click on a device → Edit → Area
-4. **Entities inherit area**: Entities automatically get the device's area assignment
-
-**Example area assignments:**
-- `sensor.living_room_temperature` → "Living Room" area
-- `binary_sensor.front_door` → "Front Entrance" area  
-- `sensor.bedroom_humidity` → "Bedroom" area
-
-**Benefits:**
-- Threshold alerts automatically show room context
-- Security alerts show which area triggered  
-- Device alerts show where the device is located
-- Manual location still overrides when needed
+3. **Assign devices to areas**: Settings > Devices & Services > Devices > Click device > Edit > Area
+4. **Entities inherit area** from their device
 
 ### Using Templates in Messages
 
 **Dynamic sensor values:**
 ```yaml
-message: "Temperature is {{ states('sensor.temperature') }}°C"
+message: "Temperature is {{ states('sensor.temperature') }}C"
 ```
 
 **Conditional messages:**
@@ -445,94 +436,51 @@ message: >
   {% endif %}
 ```
 
-**Time-based messages:**
-```yaml
-message: >
-  {% set time = now().strftime('%H:%M') %}
-  Good {% if now().hour < 12 %}morning{% else %}evening{% endif %}! 
-  Current time: {{ time }}
-```
-
 ---
 
-## Using the Lovelace Cards
+## Using the Dashboard
 
 ### Accessing the Dashboard
 
-1. **Sidebar**: Click "Alert System" in the Home Assistant sidebar
-2. **URL**: Navigate to `/lovelace/alert-system`
+- **Sidebar**: Click "Alert System" in the Home Assistant sidebar
+- **URL**: Navigate to `/lovelace/alert-system`
 
 ### Threshold Alert Management
 
 **Create alerts for sensors that exceed limits:**
 
-1. **Find Entity ID**: 
-   - Go to Developer Tools → States
-   - Search for your sensor (e.g., `sensor.temperature`)
-   - Copy the entity_id
-
+1. **Find Entity ID**: Developer Tools > States, search for your sensor
 2. **Configure Alert**:
    - **Entity ID**: `sensor.bedroom_temperature`
-   - **Threshold Value**: `25`
-   - **Condition**: `above` or `below`
-   - **Message**: Custom message (optional)
+   - **Threshold Value**: `25` (leave empty for offline-only monitoring)
+   - **Condition**: `above`, `below`, or `offline only`
+   - **Offline Delay**: Custom per-device delay (optional)
+3. **Click "Create Alert"**
 
-3. **Create Alert**: Click "✅ Create Alert"
+Messages are auto-generated from entity metadata - no need to type a message.
 
 **Management Functions**:
-- **📋 List All**: View all configured threshold alerts
-- **🗑️ Remove Alert**: Enter entity ID to remove specific alert
-- **🗑️ Clear All**: Remove all threshold alerts (with confirmation)
-- **🧪 Test System**: Send test alert to verify functionality
+- **List All**: View all configured alerts with friendly names
+- **Remove Alert**: Enter entity ID to remove specific alert
+- **Clear All**: Remove all threshold alerts (with confirmation)
+- **Test System**: Send test alert to verify functionality
 
-### Binary Sensor Automation Generator
+### Storage Format
 
-**Generate Home Assistant automation code for binary sensors:**
+Threshold data is stored in `input_text` helpers using this format:
+```
+entity:threshold:condition:offline_min
+```
 
-1. **Fill Form**:
-   - **Binary Sensor**: `binary_sensor.front_door`
-   - **Trigger State**: `on` (opened), `off` (closed), or `Device Offline`
-   - **Alert Message**: `"Front door opened"`
-   - **Alert Level**: `warning`
-   - **Channel**: `main`
-   - **Location**: `Front Entrance` (optional)
+For offline-only monitoring:
+```
+entity:::offline_min
+```
 
-2. **Validate**: Click "🔍 Validate Form" to check for errors
-
-3. **Copy YAML**: The automation YAML code is automatically generated below the form
-
-4. **Create Automation**:
-   - Go to Settings → Automations & Scenes
-   - Create New Automation → Edit in YAML
-   - Paste the generated code and save
-
-**Generated automations automatically include:**
-- **Entity context**: `entity_id` parameter for automatic location detection
-- **Proper formatting**: Ready-to-use YAML structure
-- **Error handling**: Validated entity IDs and required fields
-
-**Common Binary Sensors**:
-- **Doors**: `binary_sensor.front_door`, `binary_sensor.garage_door`  
-- **Motion**: `binary_sensor.living_room_motion`
-- **Windows**: `binary_sensor.bedroom_window`
-- **Safety**: `binary_sensor.smoke_detector`
-
-### Dashboard Sections
-
-**System Status Panel**:
-- Enable/disable threshold alerts
-- Set default alert channel
-- View system status and alert count
-
-**Alert Management**:
-- Create custom threshold alerts
-- Remove specific alerts  
-- Bulk operations (list all, clear all)
-
-**Automation Generator**:
-- Generate automation YAML for binary sensors
-- Form validation and error checking
-- Copy-paste ready code
+Multiple entries separated by `|`:
+```
+sensor.temp:25:above:10|sensor.humidity:70:above|sensor.garage:::5
+```
 
 ---
 
@@ -543,102 +491,47 @@ message: >
 - **Store in secrets.yaml only** - never in configuration files
 - **Use same token for multiple houses** - simplifies management
 - **Rotate periodically** - update token every 6-12 months
-- **Backup securely** - store token backup outside of Home Assistant
 
 ### Telegram Group Security
 
 - **Private groups only** - never use public groups
 - **Bot admin permissions** - bot needs admin rights to send messages
 - **Regular member audit** - review who has access to alert groups
-- **Clear naming** - use descriptive group names for easy identification
 
 ### Home Assistant Security
 
-- **File permissions**: Ensure `secrets.yaml` has restricted access (600)
+- **File permissions**: Ensure `secrets.yaml` has restricted access
 - **Regular updates**: Keep Home Assistant updated for security patches
-- **Network security**: Use HTTPS for external access
-- **Limited API access**: If using HTTP API, restrict access appropriately
-
-### Best Practices
-
 - **No sensitive data in alerts** - avoid personal information in messages
-- **Generic location names** - use "Living Room" not specific addresses  
-- **Monitor alert patterns** - watch for unusual alert activity
-- **Test regularly** - verify alerts are working monthly
 
 ---
 
 ## Maintenance & Updates
 
-### Regular Maintenance Tasks
+### Update Procedure
 
-**Weekly**:
-- Test alert system functionality
-- Review Home Assistant logs for errors
-- Verify Telegram bot connectivity
-
-**Monthly**:
-- Clean old backup files
-- Review threshold alert configurations
-- Update documentation if needed
-
-**Quarterly**:
-- Security review of bot permissions
-- Backup configuration files
-- Performance analysis
-
-### Update Procedures
-
-**Using Update Script**:
 ```bash
-# Run update script
+# Run update script (updates itself, package, dashboard, and blueprint)
 /config/update_alerts.sh
 
 # Restart Home Assistant
 ha core restart
 
-# Test functionality
-# Run basic connectivity test
+# Or reload without restart:
+# Developer Tools > YAML > Reload Scripts + Reload Automations
 ```
-
-**Manual Update**:
-1. **Backup current files**:
-   ```bash
-   cp /config/packages/alert_system.yaml /config/packages/alert_system.yaml.backup.$(date +%Y%m%d)
-   ```
-2. **Download new version** to `/config/packages/`
-3. **Restart Home Assistant**
-4. **Run tests** to verify functionality
-
-**Version Control**:
-- Update script automatically creates timestamped backups
-- Keep 3-5 recent backups for quick rollback
-- Document major changes in comments
 
 ### Backup Strategy
 
-**Automatic Backups**:
-- Update script creates backups before each update
-- Format: `alert_system.yaml.backup.YYYYMMDD_HHMMSS`
+- **Automatic backups** created before each update (timestamped)
+- **Rollback**: Restore from backup files in `/config/packages/`
 
-**Manual Backups**:
-```bash
-# Full package backup
-tar -czf alert_system_backup_$(date +%Y%m%d).tar.gz /config/packages/alert_system.yaml /config/lovelace/alert_system_dash.yaml
-
-# Secrets backup (sanitize personal info)
-grep -E "(house_name|telegram_)" /config/secrets.yaml > alert_secrets_backup.yaml
-```
-
-**Rollback Procedure**:
 ```bash
 # List available backups
 ls -la /config/packages/alert_system.yaml.backup.*
 
 # Restore from backup
-cp alert_system.yaml.backup.20240315_143022 alert_system.yaml
-
-# Restart Home Assistant
+cp /config/packages/alert_system.yaml.backup.TIMESTAMP /config/packages/alert_system.yaml
 ha core restart
 ```
 
@@ -646,116 +539,53 @@ ha core restart
 
 ## Troubleshooting
 
-### Common Issues
+### Scripts Not Loading
 
-#### Scripts Not Loading
-
-**Symptoms**: Missing scripts in Developer Tools → Actions
+**Symptoms**: Missing scripts in Developer Tools > Actions
 
 **Solutions**:
-1. **Check configuration.yaml**: Ensure `packages: !include_dir_named packages` is present
-2. **Verify file location**: Package file must be in `/config/packages/alert_system.yaml`
-3. **Check YAML syntax**: Use YAML validator or check HA logs
-4. **Restart required**: Full restart needed after package changes
+1. Check `configuration.yaml` has `packages: !include_dir_named packages`
+2. Verify file is at `/config/packages/alert_system.yaml`
+3. Run `ha core check` to validate YAML
+4. Full restart required after package changes
 
-**Diagnostic commands**:
-```bash
-# Check file exists and permissions
-ls -la /config/packages/alert_system.yaml
-
-# Validate YAML syntax
-ha core check
-
-# Check logs for errors
-tail -f /config/home-assistant.log | grep -i "package\|error"
-```
-
-#### No Telegram Messages
+### No Telegram Messages
 
 **Symptoms**: Scripts run without errors but no messages received
 
 **Solutions**:
-1. **Verify Chat IDs**: Check Chat IDs in secrets.yaml match your groups
-2. **Check bot permissions**: Bot must be admin in groups with send message rights
-3. **Test Telegram integration**: Use Developer Tools to test `telegram_bot.send_message`
-4. **Network connectivity**: Ensure HA can reach Telegram servers
+1. Verify Chat IDs in secrets.yaml match your groups
+2. Check bot has admin permissions in groups
+3. Test Telegram integration directly via Developer Tools
+4. Check network connectivity to Telegram servers
 
-**Test direct API call**:
-```
-https://api.telegram.org/bot<YOUR_BOT_TOKEN>/sendMessage?chat_id=<CHAT_ID>&text=Direct%20test
-```
-
-#### Template Errors
-
-**Symptoms**: Template warnings in logs about undefined variables
-
-**Common errors**:
-```
-Template variable warning: 'location' is undefined
-Template variable warning: 'channel' is undefined
-```
-
-**Solutions**:
-1. **Update package**: Latest version includes default filters
-2. **Check script calls**: Use exact parameter names from documentation
-3. **Review logs**: Template errors are warnings, not failures
-
-#### Threshold Alerts Not Triggering
+### Threshold Alerts Not Triggering
 
 **Symptoms**: Sensors cross thresholds but no alerts sent
 
 **Solutions**:
-1. **Check threshold alerts enabled**: `input_boolean.threshold_alerts_enabled` must be `on`
-2. **Verify entity configuration**: Use "📋 List All" to see configured alerts
-3. **Check sensor values**: Ensure sensor reports numeric values
-4. **Review automation logs**: Check if threshold automation is triggering
+1. Check `input_boolean.threshold_alerts_enabled` is `on`
+2. Use "List All" dashboard button to verify alert configuration
+3. Ensure sensor reports numeric values
+4. **Reload automations** (Developer Tools > YAML > Reload Automations) - the threshold monitor is an automation, not a script
+5. Check automation logs for the "Threshold Alert Monitor" automation
 
-**Diagnostic**:
-```yaml
-# Test threshold system
-action: script.test_threshold_alert
-```
+### Template Errors
 
-### Log Analysis
+**Symptoms**: Template warnings in logs
 
-**Important log locations**:
-```bash
-# Main Home Assistant log
-/config/home-assistant.log
-
-# Check for specific errors
-grep -i "telegram\|alert\|template" /config/home-assistant.log
-```
-
-**Key error patterns**:
-- **Package errors**: `Package alert_system setup failed`
-- **Template errors**: `Template variable warning`
-- **Telegram errors**: `Error sending message`
-- **YAML errors**: `YAML syntax error`
+**Solutions**:
+1. Update to latest package version
+2. Use exact parameter names from documentation
+3. Template errors are usually warnings, not failures
 
 ### Getting Help
 
 **Information to include when asking for help**:
-1. **Home Assistant version** and installation type
-2. **Error messages** from logs (sanitize personal information)
-3. **Configuration snippets** (remove tokens and Chat IDs)
-4. **Steps that reproduce the issue**
-5. **Expected vs actual behavior**
-
-**Useful diagnostic commands**:
-```bash
-# System info
-ha core info
-
-# Configuration check
-ha core check
-
-# Recent logs
-ha core logs
-
-# Package file validation
-python3 -c "import yaml; print('Valid YAML' if yaml.safe_load(open('/config/packages/alert_system.yaml')) else 'Invalid YAML')"
-```
+1. Home Assistant version
+2. Error messages from logs (sanitize personal information)
+3. Configuration snippets (remove tokens and Chat IDs)
+4. Steps that reproduce the issue
 
 ---
 
@@ -765,40 +595,23 @@ python3 -c "import yaml; print('Valid YAML' if yaml.safe_load(open('/config/pack
 
 ```
 /config/
-├── configuration.yaml          # Include packages and lovelace config
-├── secrets.yaml               # House name and Chat IDs
+├── configuration.yaml                              # Include packages and lovelace
+├── secrets.yaml                                    # House name and Chat IDs
+├── update_alerts.sh                                # Self-updating deployment script
 ├── packages/
-│   └── alert_system.yaml      # Main package file
+│   └── alert_system.yaml                           # Main package file
 ├── lovelace/
-│   └── alert_system_dash.yaml # Dashboard configuration
-└── update_alerts.sh           # Update script (optional)
+│   └── alert_system_dash.yaml                      # Dashboard configuration
+└── blueprints/
+    └── automation/
+        └── alert_system/
+            └── send_alert.yaml                     # Alert automation blueprint
 ```
 
-### Required Secrets Template
+### Required Secrets
 
 ```yaml
-# secrets.yaml template
 house_name: "Main House"
 telegram_main_alerts: "-1001234567890"
 telegram_technical_alerts: "-1001234567891"
 ```
-
-### Minimum Configuration Changes
-
-**configuration.yaml additions**:
-```yaml
-homeassistant:
-  packages: !include_dir_named packages
-
-lovelace:
-  mode: storage
-  dashboards:
-    alert-system:
-      mode: yaml
-      title: Alert System
-      icon: mdi:script
-      show_in_sidebar: true
-      filename: lovelace/alert_system_dash.yaml
-```
-
-This completes the comprehensive setup and usage guide for the Home Assistant Alert System. The system provides powerful, flexible alerting capabilities with an intuitive interface for both technical and non-technical users.

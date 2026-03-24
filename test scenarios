@@ -1,192 +1,146 @@
-# Comprehensive Test Suite for Dual-Channel Alert System with Auto-Location
-# Run these tests one by one and verify results in both Telegram groups
-# 
-# NOTE: Tests may display automatic location information if test entities
-# are assigned to Home Assistant areas. This is expected behavior.
+# Comprehensive Test Suite for Alert System v6.0
+# Run these tests one by one and verify results in Telegram groups
 #
 # SETUP: Replace example entity IDs with actual entities from your system:
 # - sensor.living_room_temperature (assigned to "Living Room" area)
 # - binary_sensor.front_door (assigned to "Front Entrance" area)
 # - sensor.cpu_temperature (assigned to "Server Room" area)
-# - binary_sensor.living_room_motion (assigned to "Living Room" area)
 # - sensor.uptime (not assigned to any area)
 
-# ===== PHASE 1: SYSTEM CONNECTIVITY TESTING =====
+# ===== PHASE 1: SYSTEM CONNECTIVITY =====
 
 # Test 1: System Test (Both Channels)
 action: script.test_alert
 data:
   channel: "both"
-# Expected: Identical messages in BOTH groups, no location (test_alert doesn't use entity_id)
+# Expected: Identical messages in BOTH groups
 
-# ===== PHASE 2: INDIVIDUAL SCRIPT TESTING =====
+# ===== PHASE 2: CORE SCRIPT TESTING =====
 
-# Test 2: Quick Alert (Main Only)
-action: script.quick_alert
-data:
-  message: "Testing quick alert - should only appear in MAIN channel"
-# Expected: Message ONLY in main group, no location (quick_alert typically used without entity context)
-
-# Test 3: Tech Alert Convenience Script (Technical Only)
-action: script.tech_alert
-data:
-  message: "Testing tech alert - should only appear in TECHNICAL channel"
-  level: "info"
-# Expected: Message ONLY in technical group, no location unless entity_id provided
-
-# Test 4: Main Alert Convenience Script (Main Only)
-action: script.main_alert
-data:
-  message: "Testing main alert - should only appear in MAIN channel"
-  level: "info"
-# Expected: Message ONLY in main group, no location unless entity_id provided
-
-# ===== PHASE 3: CHANNEL ROUTING VERIFICATION =====
-
-# Test 5: Send Alert - Main Channel
+# Test 2: Send Alert - Main Channel
 action: script.send_alert
 data:
-  message: "Explicit main channel test"
+  message: "Main channel test"
   level: "info"
   channel: "main"
-  location: "Test Area"
-# Expected: Message ONLY in main group with "📍 Test Area" location
+# Expected: Message ONLY in main group
 
-# Test 6: Send Alert - Technical Channel
+# Test 3: Send Alert - Technical Channel
 action: script.send_alert
 data:
-  message: "Explicit technical channel test"
-  level: "warning"
+  message: "Technical channel test"
+  level: "info"
   channel: "technical"
-  location: "Server Room"
-# Expected: Message ONLY in technical group with "📍 Server Room" location
+# Expected: Message ONLY in technical group
 
-# Test 7: Send Alert - Both Channels
+# Test 4: Send Alert - Both Channels
 action: script.send_alert
 data:
-  message: "Both channels test - should appear in BOTH groups"
-  level: "critical"
+  message: "Both channels test"
+  level: "info"
   channel: "both"
-  location: "Kitchen"
-# Expected: Identical messages in BOTH groups with "📍 Kitchen" location
+# Expected: Identical messages in BOTH groups
 
-# ===== PHASE 4: DEFAULT BEHAVIOR TESTING =====
-
-# Test 8: System Alert (Default: Technical)
+# Test 5: System Alert (Default: Technical)
 action: script.system_alert
 data:
-  message: "System alert default routing test"
+  message: "System alert test"
   level: "warning"
-# Expected: Message ONLY in technical group with 🖥️ prefix, no location
+# Expected: Message ONLY in technical group with "SYSTEM:" prefix
 
-# Test 9: System Alert Override to Main
+# Test 6: System Alert Override to Main
 action: script.system_alert
 data:
-  message: "System alert override to main channel"
+  message: "System alert override to main"
   level: "warning"
   channel: "main"
-# Expected: Message ONLY in main group with 🖥️ prefix, no location
+# Expected: Message ONLY in main group with "SYSTEM:" prefix
 
-# Test 10: Device Alert (Default: Technical)
-action: script.device_alert
-data:
-  device_name: "Test Device"
-  message: "default routing test"
-  level: "info"
-# Expected: Message ONLY in technical group, format: "Test Device: default routing test", no location unless entity_id provided
-
-# Test 11: Device Alert Override to Main
-action: script.device_alert
-data:
-  device_name: "Family TV"
-  message: "override to main channel"
-  level: "info"
-  channel: "main"
-# Expected: Message ONLY in main group, no location unless entity_id provided
-
-# Test 12: Security Alert (Always Both - Can't Override)
+# Test 7: Security Alert (Always Both)
 action: script.security_alert
 data:
-  message: "Security test - should ALWAYS go to both channels"
+  message: "Security test"
   location: "Front Door"
-# Expected: Identical messages in BOTH groups with 🔒 prefix, critical level, "📍 Front Door"
+# Expected: Messages in BOTH groups with "SECURITY:" prefix, critical level, ">> Front Door"
 
-# ===== PHASE 5: FORMATTING AND FEATURES TESTING =====
+# ===== PHASE 3: ALERT LEVELS =====
 
-# Test 13: All Alert Levels - Info
+# Test 8: Info Level
 action: script.send_alert
 data:
-  message: "Info level formatting test"
+  message: "Info level test"
   level: "info"
   channel: "both"
-# Expected: ℹ️ emoji, INFO level, no location
+# Expected: INFO in header
 
-# Test 14: All Alert Levels - Warning
+# Test 9: Warning Level
 action: script.send_alert
 data:
-  message: "Warning level formatting test"
+  message: "Warning level test"
   level: "warning"
   channel: "both"
-# Expected: ⚠️ emoji, WARNING level, no location
+# Expected: WARNING in header
 
-# Test 15: All Alert Levels - Critical
+# Test 10: Critical Level
 action: script.send_alert
 data:
-  message: "Critical level formatting test"
+  message: "Critical level test"
   level: "critical"
   channel: "both"
-# Expected: 🚨 emoji, CRITICAL level, no location
+# Expected: CRITICAL in header
 
-# Test 16: Timestamp Toggle
+# ===== PHASE 4: FORMATTING AND FEATURES =====
+
+# Test 11: Timestamp Toggle
 action: script.send_alert
 data:
   message: "No timestamp test"
   level: "info"
   channel: "both"
   include_timestamp: false
-# Expected: No timestamp in header, no location
+# Expected: No timestamp in header
 
-# Test 17: Manual Location Formatting
+# Test 12: Manual Location
 action: script.send_alert
 data:
-  message: "Manual location formatting test"
+  message: "Manual location test"
   level: "info"
   channel: "both"
-  location: "Multi Word Location Name"
-# Expected: 📍 Multi Word Location Name on separate line
+  location: "Test Location"
+# Expected: ">> Test Location" on separate line
 
-# Test 18: HTML Formatting
+# Test 13: HTML Formatting
 action: script.send_alert
 data:
   message: "HTML test with <b>bold</b> and <i>italic</i> text"
   level: "info"
   channel: "both"
-# Expected: Bold and italic formatting to work, no location
+# Expected: Bold and italic formatting works
 
-# ===== PHASE 6: BULK ALERT TESTING =====
+# ===== PHASE 5: BULK ALERTS =====
 
-# Test 19: Mixed Channel Bulk Alert
+# Test 14: Mixed Channel Bulk Alert
 action: script.bulk_alert
 data:
   alerts:
-    - message: "Bulk test 1 - main channel"
+    - message: "Bulk test 1 - main"
       level: "info"
       channel: "main"
-    - message: "Bulk test 2 - technical channel"
+    - message: "Bulk test 2 - technical"
       level: "warning"
       channel: "technical"
-    - message: "Bulk test 3 - both channels"
+    - message: "Bulk test 3 - both"
       level: "critical"
       channel: "both"
       location: "Test Location"
-# Expected: 
-# - Message 1 ONLY in main, no location
-# - Message 2 ONLY in technical, no location
-# - Message 3 in BOTH groups with "📍 Test Location"
+# Expected:
+# - Message 1 ONLY in main
+# - Message 2 ONLY in technical
+# - Message 3 in BOTH with ">> Test Location"
 
-# ===== PHASE 7: EDGE CASE TESTING =====
+# ===== PHASE 6: EDGE CASES =====
 
-# Test 20: Empty Location
+# Test 15: Empty Location
 action: script.send_alert
 data:
   message: "Empty location test"
@@ -195,212 +149,186 @@ data:
   location: ""
 # Expected: No location line shown
 
-# Test 21: Long Message
+# Test 16: Long Message
 action: script.send_alert
 data:
   message: "This is a very long message to test how the formatting handles extended text that might wrap across multiple lines in the Telegram interface and ensure proper formatting is maintained throughout the entire message length"
   level: "info"
   channel: "both"
   location: "Very Long Location Name That Tests Formatting"
-# Expected: Proper formatting maintained, "📍 Very Long Location Name That Tests Formatting"
+# Expected: Proper formatting maintained
 
-# Test 22: Special Characters
+# Test 17: Special Characters
 action: script.send_alert
 data:
-  message: "Special chars: !@#$%^&*()_+-=[]{}|;':\",./<>? 🎉🔥💯"
+  message: "Special chars: !@#$%^&*()_+-=[]{}|;':\",./<>?"
   level: "info"
   channel: "both"
-# Expected: All characters display correctly, no location
+# Expected: All characters display correctly
 
-# Test 23: Override Chat ID (Direct Targeting)
+# Test 18: Override Chat ID (Direct Targeting)
 action: script.send_alert
 data:
   message: "Direct chat ID override test"
   level: "info"
   chat_id: "-1001234567890"  # Replace with actual main channel Chat ID
-# Expected: Message ONLY in main group, ignoring channel parameter
+# Expected: Message ONLY in targeted group
 
-# ===== PHASE 8: ERROR CONDITION TESTING =====
-
-# Test 24: Invalid Channel (Should Default to Technical)
+# Test 19: Invalid Channel (Should Fallback to Technical)
 action: script.send_alert
 data:
-  message: "Invalid channel test - should fallback to technical with warning"
+  message: "Invalid channel test"
   level: "info"
   channel: "invalid_channel_name"
-# Expected: Fallback message in technical channel explaining the error
+# Expected: Fallback message in technical channel
 
-# Test 25: Missing Required Fields
-action: script.device_alert
-data:
-  device_name: "Test Device"
-  # Missing message field
-  level: "info"
-# Expected: Should handle gracefully or show error message
+# ===== PHASE 7: AUTOMATIC LOCATION DETECTION =====
 
-# ===== PHASE 9: AUTOMATIC LOCATION DETECTION TESTING =====
-
-# Test 26: Auto-Location Detection - Entity with Area
+# Test 20: Auto-Location - Entity with Area
 action: script.send_alert
 data:
-  message: "Testing auto-location from entity area"
+  message: "Auto-location test"
   level: "info"
   channel: "both"
-  entity_id: "sensor.living_room_temperature"  # Replace with real entity assigned to area
-# Expected: Location line shows entity's Home Assistant area assignment (e.g., "📍 Living Room")
+  entity_id: "sensor.living_room_temperature"  # Replace with entity assigned to area
+# Expected: ">> Living Room" (or whatever area the entity is assigned to)
 
-# Test 27: Manual Location Override - Should Take Priority
+# Test 21: Manual Location Override
 action: script.send_alert
 data:
-  message: "Testing manual location override"
+  message: "Manual override test"
   level: "info"
   channel: "both"
   entity_id: "sensor.living_room_temperature"
-  location: "Custom Override Location"
-# Expected: Location shows "📍 Custom Override Location", not auto-detected area
+  location: "Custom Override"
+# Expected: ">> Custom Override" (manual takes priority)
 
-# Test 28: Entity Without Area Assignment
+# Test 22: Entity Without Area
 action: script.send_alert
 data:
-  message: "Testing entity without area assignment"
+  message: "Entity without area test"
   level: "info"
   channel: "both"
-  entity_id: "sensor.uptime"  # Replace with entity not assigned to area
-# Expected: No location line shown, no errors
+  entity_id: "sensor.uptime"  # Entity not assigned to area
+# Expected: No location line, no errors
 
-# Test 29: Invalid Entity ID - Graceful Handling
+# Test 23: Invalid Entity ID
 action: script.send_alert
 data:
-  message: "Testing invalid entity ID handling"
+  message: "Invalid entity test"
   level: "info"
   channel: "both"
   entity_id: "sensor.nonexistent_sensor"
-# Expected: No location line, no errors, message sent normally
+# Expected: No location line, no errors
 
-# Test 30: Tech Alert with Auto-Location
-action: script.tech_alert
-data:
-  message: "Tech alert with automatic location"
-  level: "warning"
-  entity_id: "sensor.cpu_temperature"  # Replace with real entity
-# Expected: Message ONLY in technical channel with auto-detected location
-
-# Test 31: Main Alert with Auto-Location  
-action: script.main_alert
-data:
-  message: "Main alert with automatic location"
-  level: "info"
-  entity_id: "binary_sensor.front_door"  # Replace with real entity
-# Expected: Message ONLY in main channel with auto-detected location
-
-# Test 32: Security Alert with Auto-Location
-action: script.security_alert
-data:
-  message: "Security event with automatic location"
-  entity_id: "binary_sensor.living_room_motion"  # Replace with real entity
-# Expected: Message in BOTH channels with 🔒 prefix and auto-detected location
-
-# Test 33: Device Alert with Auto-Location
-action: script.device_alert
-data:
-  device_name: "Temperature Sensor"
-  message: "reading seems high"
-  level: "warning"
-  entity_id: "sensor.bedroom_temperature"  # Replace with real entity
-# Expected: Message in technical channel with auto-detected location
-
-# Test 34: Empty Entity ID - Should Not Break
+# Test 24: Empty Entity ID
 action: script.send_alert
 data:
-  message: "Testing empty entity_id parameter"
+  message: "Empty entity_id test"
   level: "info"
   channel: "both"
   entity_id: ""
-# Expected: No location line, no errors, message sent normally
+# Expected: No location line, no errors
 
-# Test 35: Auto-Location with Special Characters in Area Name
-action: script.send_alert
-data:
-  message: "Testing area name with special characters"
-  level: "info"
-  channel: "both"
-  entity_id: "sensor.master_bedroom_temperature"  # Entity in area named "Master Bedroom & Bath"
-# Expected: Location properly escaped: "📍 Master Bedroom & Bath"
+# ===== PHASE 8: THRESHOLD SYSTEM =====
 
-# Test 36: Multiple Scripts with Same Entity (Consistency Test)
-action: script.tech_alert
+# Test 25: Add Threshold Alert
+action: script.add_threshold_alert
 data:
-  message: "First alert with entity context"
   entity_id: "sensor.living_room_temperature"
----
-action: script.main_alert
+  threshold: "25"
+  condition: "above"
+  offline_min: "10"
+# Expected: Confirmation in technical channel
+
+# Test 26: Add Offline-Only Monitoring
+action: script.add_threshold_alert
 data:
-  message: "Second alert with same entity context"
+  entity_id: "sensor.garage_door"
+  offline_min: "5"
+# Expected: Confirmation mentioning "offline only"
+
+# Test 27: List All Alerts
+action: script.list_threshold_alerts
+# Expected: Human-readable list in technical channel with friendly names,
+#           conditions, thresholds, and offline delays
+
+# Test 28: Remove Threshold Alert
+action: script.remove_threshold_alert
+data:
   entity_id: "sensor.living_room_temperature"
-# Expected: Both alerts show same auto-detected location consistently
+# Expected: Confirmation in technical channel
 
-# ===== PHASE 10: THRESHOLD SYSTEM TESTING =====
-# NOTE: These tests require actual sensor entities and configured threshold alerts
+# Test 29: Test Threshold System
+action: script.test_threshold_alert
+# Expected: Test message sent to configured channel
 
-# Test 37: Threshold Alert Auto-Location (Manual Trigger)
-# Prerequisites: Configure a threshold alert for a sensor with area assignment
-# Manually change sensor value to cross threshold, or use Developer Tools to set state
-# Expected: Threshold alert includes auto-detected location from triggered entity
+# Test 30: Clear All Alerts
+action: script.clear_all_threshold_alerts
+# Expected: Confirmation in technical channel
 
-# Test 38: Device Online/Offline Auto-Location
-# Prerequisites: Entity assigned to area that can go offline/online  
-# Manually disconnect/reconnect device or set state to 'unavailable' then back to normal
-# Expected: Offline/online alerts include auto-detected location
+# Test 31: Create Alert from Form
+# Use the dashboard form:
+# 1. Enter entity ID in the form
+# 2. Set threshold value and condition (or select "offline only")
+# 3. Optionally set offline delay
+# 4. Click "Create Alert"
+# Expected: Alert created, form cleared, confirmation in technical channel
 
-# ===== PHASE 11: INTEGRATION TESTING =====
+# ===== PHASE 9: THRESHOLD ALERT TRIGGERING =====
+# NOTE: These require actual sensor entities and configured threshold alerts
 
-# Test 39: Lovelace Card Integration
-# Manual test using the Alert System dashboard:
-# 1. Access Alert System from sidebar
-# 2. Create threshold alert using the form
-# 3. Use entity assigned to area
-# 4. Trigger the threshold
-# Expected: Alert includes auto-detected location
+# Test 32: Threshold Breach
+# Prerequisites: Configure a threshold alert, then change sensor value to cross it
+# Expected: Auto-generated message like "Living Room Temperature is above 25 C"
+#           followed by "Current value: 27 C"
+#           with auto-detected location
 
-# Test 40: Binary Automation Generator Integration  
-# Manual test using the Binary Automation Generator:
-# 1. Fill form with binary sensor assigned to area
-# 2. Validate form (should pass)
-# 3. Copy generated YAML
-# 4. Create automation and trigger it
-# Expected: Generated automation produces alert with auto-detected location
+# Test 33: Device Offline
+# Prerequisites: Entity in threshold list goes unavailable
+# Expected: After configured delay: "DEVICE OFFLINE: {name} has been unavailable for X minutes"
+
+# Test 34: Device Online
+# Prerequisites: Previously offline entity comes back
+# Expected: Immediate "DEVICE ONLINE: {name} is back online (value unit)"
+
+# ===== PHASE 10: BLUEPRINT TESTING =====
+
+# Test 35: Create Automation via Blueprint
+# 1. Go to Settings > Automations > Create Automation > Use Blueprint
+# 2. Select "Send Alert on Entity State Change"
+# 3. Fill in all fields (entity, trigger state, message, level, channel)
+# 4. Save and enable the automation
+# 5. Trigger the entity state change
+# Expected: Alert sent with correct message, level, channel, and auto-location
 
 # ===== VERIFICATION CHECKLIST =====
 
-# ✅ CORE FUNCTIONALITY
-# - All original tests pass (backward compatibility)
+# CORE FUNCTIONALITY
+# - All 5 scripts work (send_alert, system_alert, security_alert, bulk_alert, test_alert)
 # - Channel routing works correctly (main/technical/both)
-# - Alert levels display proper emojis and formatting
-# - HTML formatting and special characters handled correctly
+# - Alert levels display correctly (INFO/WARNING/CRITICAL)
+# - HTML formatting works
 # - Invalid inputs handled gracefully
 
-# ✅ AUTO-LOCATION FEATURE  
+# AUTO-LOCATION
 # - Auto-location works when entity has area assignment
 # - Manual location always overrides auto-detected location
-# - No errors when entity has no area assignment
-# - No errors when entity_id is invalid or empty
-# - All alert scripts properly pass entity_id to send_alert
-# - Location format is consistent: "📍 Area Name"
-# - HTML escaping works correctly for area names with special characters
+# - No errors when entity has no area or entity_id is invalid/empty
+# - Location format: ">> Area Name"
 
-# ✅ ADVANCED FEATURES
-# - Threshold automation includes entity context in alerts
-# - Device online/offline alerts include location context
-# - Bulk alerts handle mixed location scenarios
-# - Form validation works with entity checking
-# - Binary automation generator includes entity context
+# THRESHOLD SYSTEM
+# - Add/remove/list/clear threshold alerts
+# - Auto-generated messages (no stored message field)
+# - Offline-only monitoring (empty threshold/condition)
+# - Per-device offline delays with global fallback
+# - Threshold breach triggers correct alert
+# - Device offline/online detection works
+# - Dashboard form creates alerts correctly
 
-# ✅ INTEGRATION TESTING
-# - Lovelace cards work with auto-location
-# - Generated automations include proper entity_id passing
-# - Multiple alert types consistently show same location for same entity
-# - System remains stable under various input conditions
+# BLUEPRINT
+# - Blueprint appears in automation creation UI
+# - All fields work (entity, state, message, level, channel, location, duration)
+# - Created automations trigger correctly
 
-# NOTE: Replace all example entity IDs with actual entities from your Home Assistant setup.
-# Ensure test entities include both entities assigned to areas and entities without area assignments
-# for comprehensive testing of the auto-location feature.
+# NOTE: Replace all example entity IDs with actual entities from your HA setup.
