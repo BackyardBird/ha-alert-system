@@ -791,7 +791,7 @@ automation:
   # switch to YAML mode, paste, then edit the values.
   - alias: "TEMPLATE - Alert on State Change"
     id: "alert_template_do_not_enable"
-    description: "Template automation - duplicate this for new alerts. Do not enable directly."
+    description: "Template automation - duplicate this for new alerts. Do not enable directly. Prefer using the 'Send Alert on Entity State Change' blueprint instead (Settings > Automations > Blueprints)."
     trigger:
       - platform: state
         entity_id: sensor.CHANGE_ME          # The entity to monitor
