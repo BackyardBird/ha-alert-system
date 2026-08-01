@@ -236,10 +236,73 @@ data:
 - **entity_id**: For automatic location detection (optional)
 - **include_timestamp**: true/false (default: true)
 - **chat_id**: Direct message to specific chat (optional)
+- **cooldown_min**: Minutes to mute repeats of this alert (default: 0 = no limit)
+- **dedup_key**: Which alerts count as "the same" for the cooldown (optional)
 
 **Automatic Location Detection:**
 - When `entity_id` is provided but `location` is empty, location is automatically filled from the entity's Home Assistant area assignment
 - Manual `location` always takes priority over auto-detected location
+
+### Repeat Alert Suppression
+
+A sensor hovering at its threshold crosses it repeatedly, and a flaky device drops offline
+and recovers over and over. Each crossing is a separate Telegram message unless a cooldown
+is set.
+
+**How it works.** The first alert is always sent immediately. `send_alert` then records the
+alert's key in `sensor.alert_cooldown_registry` with an expiry time; any further alert with
+the same key is dropped until that expiry passes. Expired entries are pruned automatically
+on the next write, and because the registry is a trigger-based template sensor, Home
+Assistant restores it across a restart - a reboot does not silently re-open every cooldown
+window.
+
+**Grouping.** Alerts share a cooldown when they share a `dedup_key`. If you do not pass one:
+
+| Situation | Key used |
+|-----------|----------|
+| `entity_id` provided | `entity_id/level` |
+| No `entity_id` | `message/level` |
+
+**Pass `dedup_key` explicitly whenever the message contains a changing value.** A message
+like `"Level now 4.9%"` differs on every send, so the default key would never match and
+nothing would ever be suppressed.
+
+**Built-in alerts.** Threshold breaches and device offline/online alerts use
+`input_number.alert_cooldown_minutes`, adjustable on the dashboard. The helper deliberately
+has no `initial:` value, so your setting survives restarts; until it is set for the first
+time the callers fall back to 60 minutes. They are
+keyed per entity and per threshold, so `sensor.tank below 5` and `sensor.tank above 90`
+mute independently, as do a device's offline and online alerts. Set the helper to `0` to
+restore the pre-6.1 alert-on-every-crossing behaviour.
+
+**Example - alert on the first drop, then at most once a day:**
+
+```yaml
+action: script.send_alert
+data:
+  message: "Rainbarrel below 5% (now {{ states('sensor.rainbarrel_pct') }}%)"
+  level: warning
+  channel: main
+  entity_id: sensor.rainbarrel_pct
+  cooldown_min: 1440
+  dedup_key: "sensor.rainbarrel_pct/below/5"
+```
+
+The Send Alert blueprint exposes the same thing as **Minimum Time Between Alerts**.
+
+**Monitoring.** `sensor.alert_cooldowns_active` counts what is currently muted and decays
+on its own as windows expire. The registry's `entries` attribute lists each muted key with
+its expiry. A suppressed run shows up in the `script.send_alert` trace as a `stop` step
+naming the key and window.
+
+**Cooldown vs. duration.** They solve different problems and combine well. The blueprint's
+*Duration Before Alert* waits for the entity to hold its state before alerting at all, which
+delays the first alert. *Minimum Time Between Alerts* lets the first alert through
+immediately and mutes the repeats.
+
+**Limits.** Suppression is best-effort: two alerts with the same key firing in the same
+instant can both get through, since the registry is updated via an event. `send_alert` runs
+in `queued` mode, which serialises bursts and makes this unlikely.
 
 ### Alert Levels
 

@@ -29,6 +29,12 @@ views:
               - entity: input_number.device_offline_delay_minutes
                 name: Device Offline Alert Delay
                 icon: mdi:timer
+              - entity: input_number.alert_cooldown_minutes
+                name: Repeat Alert Cooldown
+                icon: mdi:timer-lock
+              - entity: sensor.alert_cooldowns_active
+                name: Alerts Currently Muted
+                icon: mdi:timer-lock-outline
           - type: horizontal-stack
             cards:
               - show_name: true
@@ -114,6 +120,24 @@ views:
               service: script.remove_threshold_alert_from_form
             name: Remove Alert
             icon: mdi:delete
+          - type: markdown
+            title: "Repeat Alert Suppression"
+            content: |
+              **Cooldown:** {{ states('input_number.alert_cooldown_minutes') | int(60) }} minutes{% if not states('input_number.alert_cooldown_minutes') | int(-1) >= 0 %} *(default — never set)*{% endif %} — after a threshold breach or an offline/online alert fires, the same alert stays quiet for this long. Set it to 0 to alert on every single crossing.
+
+              **Currently muted:** {{ states('sensor.alert_cooldowns_active') }}
+              {%- set entries = state_attr('sensor.alert_cooldown_registry', 'entries') or [] %}
+              {%- set nowts = as_timestamp(now()) | int %}
+              {% for e in entries %}
+              {%- set p = (e | string).split('|') %}
+              {%- if p | length == 2 and p[1] | int(0) > nowts %}
+              - `{{ p[0] }}` — {{ ((p[1] | int - nowts) / 60) | round(0) | int }} min left
+              {%- endif %}
+              {%- endfor %}
+              {% if states('sensor.alert_cooldowns_active') | int(0) < 1 %}
+              *Nothing is being suppressed right now.*
+              {%- endif %}
+
           - type: markdown
             title: "Current Storage Contents"
             content: |
@@ -261,8 +285,30 @@ views:
               - **Remove**: Enter entity_id in remove section
               - **Clear All**: Remove all configured alerts (with confirmation)
 
+              ### Repeat Alert Cooldown
+
+              **Current setting:** {{ states('input_number.alert_cooldown_minutes') | int(60) }} minutes
+
+              A sensor sitting near its threshold crosses it over and over, and a flaky
+              device goes offline and online repeatedly. Without a cooldown each crossing
+              is a separate Telegram message.
+
+              The first alert always goes out immediately. After that the *same* alert is
+              muted for the cooldown period. Alerts are counted as "the same" per entity
+              plus threshold, so `sensor.tank below 5` and `sensor.tank above 90` mute
+              independently, as do a device's offline and online alerts.
+
+              - `0` = alert on every crossing (the pre-6.1 behaviour)
+              - `60` = at most one per hour per alert (default)
+              - `1440` = at most one per day per alert
+
+              For automations you wrote yourself, pass `cooldown_min` to
+              `script.send_alert`, or use the "Minimum Time Between Alerts" option in the
+              Send Alert blueprint.
+
               ### Smart Features:
               - **Parallel processing** - Multiple devices can have pending alerts
+              - **Repeat suppression** - Same alert muted for the cooldown period
               - **Auto-cancellation** - If device comes online during delay, no alert sent
               - **Custom indication** - Alerts show "(custom delay)" when applicable
               - **Auto-generated messages** - No need to write alert messages, they are built from entity name and threshold data

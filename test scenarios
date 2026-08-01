@@ -1,4 +1,4 @@
-# Comprehensive Test Suite for Alert System v6.0
+# Comprehensive Test Suite for Alert System v6.1
 # Run these tests one by one and verify results in Telegram groups
 #
 # SETUP: Replace example entity IDs with actual entities from your system:
@@ -302,6 +302,74 @@ action: script.clear_all_threshold_alerts
 # 5. Trigger the entity state change
 # Expected: Alert sent with correct message, level, channel, and auto-location
 
+# ===== PHASE 9: REPEAT ALERT SUPPRESSION =====
+
+# Test A: Cooldown suppresses an immediate repeat
+# Developer Tools > Actions:
+action: script.send_alert
+data:
+  message: "Cooldown test"
+  level: warning
+  channel: technical
+  dedup_key: "cooldown_test"
+  cooldown_min: 5
+# Run it TWICE in a row.
+# Expected: exactly ONE message in the technical group. The second run's trace
+#           ends at the "stop" step with "Suppressed: 'cooldown_test' ...".
+#           sensor.alert_cooldowns_active goes to 1.
+
+# Test B: Cooldown expires
+# Wait 5 minutes, run the Test A action again.
+# Expected: message is delivered again. sensor.alert_cooldowns_active returns to 0
+#           on its own within a minute of expiry.
+
+# Test C: cooldown_min 0 keeps the old behaviour
+action: script.send_alert
+data:
+  message: "No cooldown test"
+  channel: technical
+  cooldown_min: 0
+# Run three times.
+# Expected: THREE messages. Omitting cooldown_min entirely must behave the same.
+
+# Test D: Different keys mute independently
+# Run Test A's action twice with dedup_key "key_one", then twice with "key_two".
+# Expected: two messages total, one per key.
+
+# Test E: Default key when no dedup_key is given
+action: script.send_alert
+data:
+  message: "Default key test"
+  entity_id: sensor.living_room_temperature
+  level: warning
+  channel: technical
+  cooldown_min: 10
+# Run twice, then run once more with level: critical.
+# Expected: TWO messages - the level change forms a different key.
+
+# Test F: Threshold breach cooldown
+# 1. Set input_number.alert_cooldown_minutes to 5 on the dashboard
+# 2. Add a threshold alert whose sensor sits near its threshold
+# 3. Force the sensor across the threshold twice within 5 minutes
+# Expected: ONE alert. The dashboard "Repeat Alert Suppression" card lists the
+#           key sensor.x/above/NN with the remaining minutes.
+
+# Test G: Offline/online flapping
+# 1. With alert_cooldown_minutes at 5, take a monitored device offline and
+#    bring it back twice inside the window
+# Expected: ONE "DEVICE OFFLINE" and ONE "DEVICE ONLINE", not two of each.
+
+# Test H: Cooldown survives a restart
+# 1. Fire Test A's action with cooldown_min: 60
+# 2. Restart Home Assistant
+# 3. Fire it again
+# Expected: still suppressed. sensor.alert_cooldown_registry keeps its "entries"
+#           attribute across the restart.
+
+# Test I: Registry does not leak
+# After all the above, check sensor.alert_cooldown_registry attributes.
+# Expected: only unexpired entries remain; expired ones are dropped on the next write.
+
 # ===== VERIFICATION CHECKLIST =====
 
 # CORE FUNCTIONALITY
@@ -326,9 +394,20 @@ action: script.clear_all_threshold_alerts
 # - Device offline/online detection works
 # - Dashboard form creates alerts correctly
 
+# REPEAT SUPPRESSION
+# - Repeat inside the window is dropped, first alert is always immediate
+# - Alert fires again once the window expires
+# - cooldown_min 0 / omitted alerts every time (no regression)
+# - Different dedup_keys and different levels mute independently
+# - Threshold and offline/online alerts honour input_number.alert_cooldown_minutes
+# - sensor.alert_cooldowns_active tracks and decays without a restart
+# - Cooldowns survive a Home Assistant restart
+# - Registry prunes expired entries
+
 # BLUEPRINT
 # - Blueprint appears in automation creation UI
-# - All fields work (entity, state, message, level, channel, location, duration)
+# - All fields work (entity, state, message, level, channel, location, duration, cooldown)
 # - Created automations trigger correctly
+# - Minimum Time Between Alerts suppresses repeat triggers
 
 # NOTE: Replace all example entity IDs with actual entities from your HA setup.

@@ -63,6 +63,20 @@ blueprint:
           step: 1
           unit_of_measurement: "minutes"
 
+    cooldown:
+      name: "Minimum Time Between Alerts"
+      description: "After alerting, stay quiet for this long even if the entity keeps entering the trigger state. 0 alerts every time, 1440 is once per day."
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 1440
+          step: 5
+          unit_of_measurement: "minutes"
+
+variables:
+  bp_trigger_state: !input trigger_state
+
 trigger:
   - platform: state
     entity_id: !input entity
@@ -79,5 +93,9 @@ action:
       location: !input location
       entity_id: "{{ trigger.entity_id }}"
       include_timestamp: true
+      cooldown_min: !input cooldown
+      # Keyed per entity + trigger state, so two alerts on the same entity
+      # (for example "below 5" and "above 90") mute independently
+      dedup_key: "{{ trigger.entity_id }}/{{ bp_trigger_state }}"
 
 mode: single

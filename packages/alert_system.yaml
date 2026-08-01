@@ -1,5 +1,11 @@
 # packages/alert_system.yaml
-# Version: 6.0.1 - simplified alert system
+# Version: 6.1.0 - simplified alert system
+# 6.1.0: repeat-alert suppression. script.send_alert accepts cooldown_min +
+#        dedup_key and silently drops repeats of the same alert inside the
+#        window. Threshold breaches and device offline/online alerts now use
+#        input_number.alert_cooldown_minutes by default. Cooldown state lives
+#        in sensor.alert_cooldown_registry (trigger-based, survives restarts).
+#        send_alert is mode: queued so bursts are serialised, not dropped.
 # 6.0.1: telegram_bot.send_message uses chat_id: instead of the deprecated
 #        target: parameter (removed in HA 2026.9.0)
 # Removed wrapper scripts, binary automation generator, example automations
@@ -43,6 +49,18 @@ script:
         description: "Alert channel (main/technical/both)"
         example: "main"
         default: "main"
+      cooldown_min:
+        description: "Minimum minutes between repeats of this alert. 0 (default) sends every time."
+        example: "60"
+        default: 0
+      dedup_key:
+        description: "Groups alerts that count as 'the same' for the cooldown. Defaults to entity_id (or the message) plus level. Set this explicitly when the message contains a changing value."
+        example: "sensor.rainbarrel/below/5"
+        required: false
+    # queued so a burst of simultaneous alerts is serialised rather than
+    # dropped, and so the cooldown registry is read and written in order
+    mode: queued
+    max: 25
     sequence:
       - variables:
           house_name: !secret house_name
@@ -58,6 +76,49 @@ script:
             {% else %}
               {{ '' }}
             {% endif %}
+          # Repeat-alert suppression. cooldown of 0 keeps the old behaviour.
+          cooldown: "{{ cooldown_min | default(0) | float(0) }}"
+          # '|' is the registry separator, so it can never appear in a key
+          suppress_key: >
+            {% if dedup_key is defined and dedup_key not in ['', none] %}
+              {{ dedup_key | string | replace('|', '/') }}
+            {% elif entity_id is defined and entity_id != '' %}
+              {{ entity_id }}/{{ level | default('info') }}
+            {% else %}
+              {{ (message | default('')) | string | replace('|', '/') | truncate(100, true, '') }}/{{ level | default('info') }}
+            {% endif %}
+
+      # How many unexpired registry entries match this key
+      - variables:
+          active_suppressions: >
+            {% set entries = state_attr('sensor.alert_cooldown_registry', 'entries') or [] %}
+            {% set nowts = as_timestamp(now()) | int %}
+            {% set ns = namespace(hits=0) %}
+            {% for e in entries %}
+              {% set p = (e | string).split('|') %}
+              {% if p | length == 2 and p[0] == (suppress_key | string) and p[1] | int(0) > nowts %}
+                {% set ns.hits = ns.hits + 1 %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.hits }}
+
+      # Still inside the cooldown window - drop this alert silently
+      - if:
+          - condition: template
+            value_template: "{{ cooldown > 0 and active_suppressions | int(0) > 0 }}"
+        then:
+          - stop: "Suppressed: '{{ suppress_key }}' is within its {{ cooldown | int }} min cooldown"
+
+      # Arm the cooldown before sending, so retries during the send cannot slip through
+      - if:
+          - condition: template
+            value_template: "{{ cooldown > 0 }}"
+        then:
+          - event: alert_system_cooldown_set
+            event_data:
+              key: "{{ suppress_key | string }}"
+              cooldown_min: "{{ cooldown }}"
+
       - choose:
           - conditions:
               - condition: template
@@ -125,6 +186,12 @@ script:
         description: "Specific chat ID (optional)"
         required: false
         example: "-1001234567890"
+      cooldown_min:
+        description: "Minimum minutes between repeats of this alert"
+        default: 0
+      dedup_key:
+        description: "Cooldown grouping key (optional)"
+        required: false
     sequence:
       - action: script.send_alert
         data:
@@ -134,6 +201,8 @@ script:
           chat_id: "{{ chat_id | default('') }}"
           location: ""
           include_timestamp: true
+          cooldown_min: "{{ cooldown_min | default(0) }}"
+          dedup_key: "{{ dedup_key | default('') }}"
 
   security_alert:
     alias: "Security Alert"
@@ -155,6 +224,12 @@ script:
         description: "Specific chat ID (optional)"
         required: false
         example: "-1001234567890"
+      cooldown_min:
+        description: "Minimum minutes between repeats of this alert"
+        default: 0
+      dedup_key:
+        description: "Cooldown grouping key (optional)"
+        required: false
     sequence:
       - action: script.send_alert
         data:
@@ -165,6 +240,8 @@ script:
           channel: "both"
           chat_id: "{{ chat_id | default('') }}"
           include_timestamp: true
+          cooldown_min: "{{ cooldown_min | default(0) }}"
+          dedup_key: "{{ dedup_key | default('') }}"
 
   bulk_alert:
     alias: "Bulk Alert"
@@ -196,6 +273,8 @@ script:
                 location: "{{ repeat.item.location | default('') }}"
                 channel: "{{ repeat.item.channel | default('main') }}"
                 chat_id: "{{ repeat.item.chat_id | default('') }}"
+                cooldown_min: "{{ repeat.item.cooldown_min | default(0) }}"
+                dedup_key: "{{ repeat.item.dedup_key | default('') }}"
 
   test_alert:
     alias: "Test Alert System"
@@ -561,6 +640,9 @@ script:
           level: "warning"
           channel: "technical"
           location: "{{ friendly_name }}"
+          # A flapping device would otherwise alert on every drop-out
+          dedup_key: "{{ entity_id }}/offline"
+          cooldown_min: "{{ states('input_number.alert_cooldown_minutes') | int(60) }}"
 
 # ===================================
 # INPUT HELPERS
@@ -641,6 +723,18 @@ input_number:
     unit_of_measurement: "minutes"
     icon: mdi:timer
 
+  # Applied to threshold breaches and device offline/online alerts.
+  # Set to 0 to go back to alerting on every single crossing.
+  # Deliberately no "initial:" - that would force the value back on every
+  # restart. Until it is set once, callers fall back to int(60).
+  alert_cooldown_minutes:
+    name: "Repeat Alert Cooldown"
+    min: 0
+    max: 1440
+    step: 5
+    unit_of_measurement: "minutes"
+    icon: mdi:timer-lock
+
 # ===================================
 # TEMPLATE SENSORS
 # ===================================
@@ -656,6 +750,54 @@ template:
         unique_id: "pkg_threshold_alert_status"
         state: "{% if is_state('input_boolean.threshold_alerts_enabled', 'on') %}{% set count = states('sensor.threshold_alert_count') | int %}{% if count > 0 %}Monitoring {{ count }} entities{% else %}No entities configured{% endif %}{% else %}Disabled{% endif %}"
         icon: mdi:shield-check
+
+      # How many alerts are currently muted. Re-renders every minute because
+      # the template uses now(), so the count decays on its own.
+      - name: "Alert Cooldowns Active"
+        unique_id: "pkg_alert_cooldowns_active"
+        state: >
+          {% set entries = state_attr('sensor.alert_cooldown_registry', 'entries') or [] %}
+          {% set nowts = as_timestamp(now()) | int %}
+          {% set ns = namespace(n=0) %}
+          {% for e in entries %}
+            {% set p = (e | string).split('|') %}
+            {% if p | length == 2 and p[1] | int(0) > nowts %}
+              {% set ns.n = ns.n + 1 %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.n }}
+        icon: mdi:timer-lock-outline
+
+  # ===================================
+  # REPEAT-ALERT SUPPRESSION REGISTRY
+  # ===================================
+  # Holds one "<dedup_key>|<expiry_epoch>" string per muted alert. Written only
+  # by script.send_alert firing alert_system_cooldown_set; expired entries are
+  # dropped on the next write. This is a trigger-based sensor, so HA restores
+  # its state and attributes across a restart - unlike an automation's
+  # last_triggered, a restart does not silently re-open every cooldown window.
+  - trigger:
+      - trigger: event
+        event_type: alert_system_cooldown_set
+    sensor:
+      - name: "Alert Cooldown Registry"
+        unique_id: "pkg_alert_cooldown_registry"
+        state: "{{ now().isoformat() }}"
+        icon: mdi:timer-lock
+        attributes:
+          entries: >
+            {% set nowts = as_timestamp(now()) | int %}
+            {% set key = trigger.event.data.key | string %}
+            {% set cd = trigger.event.data.cooldown_min | float(0) %}
+            {% set expiry = (nowts + cd * 60) | round(0) | int %}
+            {% set ns = namespace(kept=[]) %}
+            {% for e in (this.attributes.get('entries', []) or []) %}
+              {% set p = (e | string).split('|') %}
+              {% if p | length == 2 and p[0] != key and p[1] | int(0) > nowts %}
+                {% set ns.kept = ns.kept + [e | string] %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.kept + [key ~ '|' ~ expiry] }}
 
 # ===================================
 # AUTOMATIONS
@@ -728,6 +870,8 @@ automation:
                       level: "warning"
                       channel: "technical"
                       location: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
+                      dedup_key: "{{ triggered_entity }}/offline"
+                      cooldown_min: "{{ states('input_number.alert_cooldown_minutes') | int(60) }}"
             # If delay is configured, start delayed alert script
             default:
               - action: script.delayed_offline_alert
@@ -751,6 +895,8 @@ automation:
               level: "info"
               channel: "technical"
               location: "{{ state_attr(triggered_entity, 'friendly_name') or triggered_entity.split('.')[1] | replace('_', ' ') | title }}"
+              dedup_key: "{{ triggered_entity }}/online"
+              cooldown_min: "{{ states('input_number.alert_cooldown_minutes') | int(60) }}"
 
       # Process threshold logic only if both states are numeric
       - if:
@@ -787,6 +933,10 @@ automation:
                             level: warning
                             channel: "{{ states('input_select.threshold_alert_channel') }}"
                             location: "{{ friendly_name }}"
+                            # Explicit key: the message carries the live value, so it
+                            # cannot be used to recognise a repeat of the same breach
+                            dedup_key: "{{ triggered_entity }}/{{ condition_type }}/{{ threshold_clean }}"
+                            cooldown_min: "{{ states('input_number.alert_cooldown_minutes') | int(60) }}"
 
   # Template automation - duplicate and customize for each new alert
   # To use: copy this block in HA UI (Settings > Automations > Create),
@@ -809,6 +959,10 @@ automation:
           channel: "main"                    # main, technical, or both
           entity_id: "{{ trigger.entity_id }}" # Auto-detects location from entity area
           include_timestamp: true
+          cooldown_min: 0                    # Minutes to mute repeats. 0 = alert every time,
+                                             # 1440 = at most once a day
+          # dedup_key: "my_alert"            # Only needed if the message contains a live
+                                             # value; otherwise entity_id + level is used
     mode: single
     initial_state: false                     # Disabled by default - enable after customizing
 

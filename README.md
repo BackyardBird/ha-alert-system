@@ -31,9 +31,15 @@ A centralized, dual-channel notification system for Home Assistant designed for 
 - **Per-device offline delays** with global fallback
 - **Visual dashboard** for managing alert rules
 
+### Repeat Alert Suppression
+- **Per-alert cooldown** - the first alert is immediate, repeats are muted for a set window
+- **Survives restarts** - cooldown state is kept in a trigger-based sensor, not in `last_triggered`
+- **Applies everywhere** - threshold breaches, offline/online alerts, blueprint and hand-written automations
+- **Self-pruning** - expired entries are dropped automatically, nothing to maintain
+
 ### Blueprint for Custom Automations
 - **UI-driven form** for creating alert automations
-- **Entity picker**, trigger state, message, level, channel, location, duration
+- **Entity picker**, trigger state, message, level, channel, location, duration, cooldown
 - **No YAML editing required** - fill in the form and save
 
 ## Message Format
@@ -175,7 +181,41 @@ data:
 
 ### Custom Automations via Blueprint
 
-Go to **Settings > Automations > Create Automation > Use Blueprint** and select "Send Alert on Entity State Change". Fill in the form - no YAML needed.
+Go to **Settings > Automations > Create Automation > Use Blueprint** and select "Send Alert on Entity State Change". Fill in the form - no YAML needed. Use **Minimum Time Between Alerts** to stop a flapping entity from alerting repeatedly.
+
+### Limiting Repeat Alerts
+
+A sensor sitting near its threshold crosses it over and over, and a flaky device goes
+offline and online repeatedly. Without a cooldown, every crossing is its own Telegram
+message.
+
+`input_number.alert_cooldown_minutes` (default 60, on the dashboard) covers the built-in
+threshold and offline/online alerts. Set it to `0` for the old alert-on-every-crossing
+behaviour.
+
+For your own automations, pass `cooldown_min` to any alert script:
+
+```yaml
+# Rain barrel: alert on the first drop below 5%, then at most once a day
+action: script.send_alert
+data:
+  message: "Rainbarrel below 5% (now {{ states('sensor.rainbarrel_pct') }}%)"
+  level: warning
+  channel: main
+  entity_id: sensor.rainbarrel_pct
+  cooldown_min: 1440
+  dedup_key: "sensor.rainbarrel_pct/below/5"
+```
+
+**How alerts are grouped.** Two alerts share a cooldown when they share a `dedup_key`.
+If you do not pass one it defaults to `entity_id/level`, or to `message/level` when there
+is no `entity_id`. **Pass `dedup_key` explicitly whenever the message contains a changing
+value** - otherwise every message is a different string and nothing is ever recognised as
+a repeat.
+
+The first alert always goes out immediately; only repeats inside the window are dropped.
+Suppressed alerts are visible in the trace of `script.send_alert` and counted by
+`sensor.alert_cooldowns_active`.
 
 ## Architecture
 
@@ -219,6 +259,7 @@ The full documentation includes:
 ### Features
 - 5 alert scripts with flexible routing and formatting
 - Threshold monitoring with auto-generated messages
+- Per-alert cooldown to suppress repeat alerts
 - Offline-only device monitoring
 - Blueprint for creating custom alert automations
 - HTML message formatting
@@ -234,6 +275,7 @@ The repository includes a comprehensive test suite in `test scenarios` covering:
 - Alert level formatting
 - Threshold monitoring
 - Offline detection
+- Repeat alert suppression
 - Error condition handling
 - Edge cases and special characters
 
