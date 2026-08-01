@@ -1,5 +1,7 @@
 # packages/alert_system.yaml
-# Version: 6.0.0 - simplified alert system
+# Version: 6.0.1 - simplified alert system
+# 6.0.1: telegram_bot.send_message uses chat_id: instead of the deprecated
+#        target: parameter (removed in HA 2026.9.0)
 # Removed wrapper scripts, binary automation generator, example automations
 # New storage format: entity:threshold:condition:offline_min (no message field)
 # Support for offline-only monitoring with empty threshold/condition
@@ -63,7 +65,7 @@ script:
             sequence:
               - action: telegram_bot.send_message
                 data:
-                  target: "{{ chat_id | int }}"
+                  chat_id: "{{ chat_id | int }}"
                   message: "<b>{{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if final_location %}\n>> {{ final_location | e }}{% endif %}"
                   parse_mode: "html"
           - conditions:
@@ -72,7 +74,7 @@ script:
             sequence:
               - action: telegram_bot.send_message
                 data:
-                  target: "{{ main_chat | int }}"
+                  chat_id: "{{ main_chat | int }}"
                   message: "<b>{{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if final_location %}\n>> {{ final_location | e }}{% endif %}"
                   parse_mode: "html"
           - conditions:
@@ -81,7 +83,7 @@ script:
             sequence:
               - action: telegram_bot.send_message
                 data:
-                  target: "{{ tech_chat | int }}"
+                  chat_id: "{{ tech_chat | int }}"
                   message: "<b>{{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if final_location %}\n>> {{ final_location | e }}{% endif %}"
                   parse_mode: "html"
           - conditions:
@@ -90,18 +92,18 @@ script:
             sequence:
               - action: telegram_bot.send_message
                 data:
-                  target: "{{ main_chat | int }}"
+                  chat_id: "{{ main_chat | int }}"
                   message: "<b>{{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if final_location %}\n>> {{ final_location | e }}{% endif %}"
                   parse_mode: "html"
               - action: telegram_bot.send_message
                 data:
-                  target: "{{ tech_chat | int }}"
+                  chat_id: "{{ tech_chat | int }}"
                   message: "<b>{{ house_name|upper }} {{ level|upper }}</b> {{ timestamp }}\n{{ message | e }}{% if final_location %}\n>> {{ final_location | e }}{% endif %}"
                   parse_mode: "html"
         default:
           - action: telegram_bot.send_message
             data:
-              target: "{{ tech_chat | int }}"
+              chat_id: "{{ tech_chat | int }}"
               message: "<b>{{ house_name|upper }} WARNING</b> {{ timestamp }}\nALERT SYSTEM: Invalid channel '{{ channel }}' specified. Message sent to technical channel as fallback.\n\nOriginal message: {{ message | e }}{% if final_location %}\n>> {{ final_location | e }}{% endif %}"
               parse_mode: "html"
 
