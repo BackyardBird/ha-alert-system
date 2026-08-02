@@ -284,8 +284,22 @@ The repository includes a comprehensive test suite in `test scenarios` covering:
 ### Automatic Updates
 ```bash
 # Run on each house to get latest version (script updates itself too)
-/config/update_alerts.sh
+sudo /config/update_alerts.sh
 ```
+
+The updater resolves the current commit on `main` through the GitHub API and
+downloads from a commit-pinned URL. This matters: `raw.githubusercontent.com`
+serves branch URLs from a CDN cache that can lag a push by several minutes, so
+fetching `.../main/...` right after a commit can silently install the *previous*
+version - the download succeeds, the file is valid, and nothing looks wrong. A
+commit-pinned URL is immutable and cannot go stale.
+
+It prints the commit and the installed version at the end. Every download is
+sanity-checked before it replaces a live file, and a failure on the package or
+dashboard aborts with a non-zero exit rather than leaving a partial install.
+
+If the GitHub API is unreachable it falls back to `main` and says so - that run
+can be stale, so re-run it later if the version does not change as expected.
 
 ### Backup Strategy
 - Automatic timestamped backups created before each update
