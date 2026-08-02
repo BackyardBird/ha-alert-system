@@ -268,9 +268,11 @@ like `"Level now 4.9%"` differs on every send, so the default key would never ma
 nothing would ever be suppressed.
 
 **Built-in alerts.** Threshold breaches and device offline/online alerts use
-`input_number.alert_cooldown_minutes`, adjustable on the dashboard. The helper deliberately
-has no `initial:` value, so your setting survives restarts; until it is set for the first
-time the callers fall back to 60 minutes. They are
+`input_number.alert_cooldown_minutes`, adjustable on the dashboard. It is seeded to 60 the
+first time Home Assistant starts after installing, then left alone forever - the helper has
+no `initial:` value, so your own setting (including a deliberate 0) survives restarts. The
+one-time seed is guarded by `input_boolean.alert_cooldown_seeded`; if you ever want the
+default re-applied, turn that latch off and restart. They are
 keyed per entity and per threshold, so `sensor.tank below 5` and `sensor.tank above 90`
 mute independently, as do a device's offline and online alerts. Set the helper to `0` to
 restore the pre-6.1 alert-on-every-crossing behaviour.

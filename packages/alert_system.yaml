@@ -1,5 +1,8 @@
 # packages/alert_system.yaml
-# Version: 6.1.0 - simplified alert system
+# Version: 6.1.1 - simplified alert system
+# 6.1.1: seed input_number.alert_cooldown_minutes to 60 once on a new install.
+#        A package input_number with no "initial:" loads at min (0), so the
+#        int(60) fallback never fired and the default cooldown was silently 0.
 # 6.1.0: repeat-alert suppression. script.send_alert accepts cooldown_min +
 #        dedup_key and silently drops repeats of the same alert inside the
 #        window. Threshold breaches and device offline/online alerts now use
@@ -695,6 +698,13 @@ input_boolean:
     initial: true
     icon: mdi:alert-circle
 
+  # Latch for the one-time cooldown seed. No "initial:", so it is off on a
+  # fresh install and restored as on ever after - which is what stops the
+  # seed automation from overwriting a value the house has chosen.
+  alert_cooldown_seeded:
+    name: "Alert Cooldown Default Applied"
+    icon: mdi:check-decagram
+
 input_select:
   threshold_alert_channel:
     name: "Default Alert Channel"
@@ -726,7 +736,10 @@ input_number:
   # Applied to threshold breaches and device offline/online alerts.
   # Set to 0 to go back to alerting on every single crossing.
   # Deliberately no "initial:" - that would force the value back on every
-  # restart. Until it is set once, callers fall back to int(60).
+  # restart and silently discard whatever the house had configured. A fresh
+  # helper loads at "min" (0), so the "Alert System: Seed Cooldown Default"
+  # automation below sets it to 60 exactly once, guarded by
+  # input_boolean.alert_cooldown_seeded.
   alert_cooldown_minutes:
     name: "Repeat Alert Cooldown"
     min: 0
@@ -937,6 +950,30 @@ automation:
                             # cannot be used to recognise a repeat of the same breach
                             dedup_key: "{{ triggered_entity }}/{{ condition_type }}/{{ threshold_clean }}"
                             cooldown_min: "{{ states('input_number.alert_cooldown_minutes') | int(60) }}"
+
+  # Gives a fresh install a working 60 min cooldown without using "initial:",
+  # which would reset the house's own setting on every restart. Runs at most
+  # once per install: the latch below is only off before the first run.
+  - alias: "Alert System: Seed Cooldown Default"
+    id: "alert_system_seed_cooldown_default"
+    description: "One-time default for input_number.alert_cooldown_minutes on a new install. Set the cooldown to whatever you want afterwards - this will not touch it again, including a deliberate 0."
+    mode: single
+    trigger:
+      - trigger: homeassistant
+        event: start
+    condition:
+      - condition: state
+        entity_id: input_boolean.alert_cooldown_seeded
+        state: "off"
+    action:
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.alert_cooldown_minutes
+        data:
+          value: 60
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.alert_cooldown_seeded
 
   # Template automation - duplicate and customize for each new alert
   # To use: copy this block in HA UI (Settings > Automations > Create),
